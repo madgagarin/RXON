@@ -10,6 +10,7 @@ from ..constants import (
     AUTH_HEADER_WORKER,
     ENDPOINT_TASK_NEXT,
     ENDPOINT_TASK_RESULT,
+    ENDPOINT_WORKER_EVENTS,
     ENDPOINT_WORKER_HEARTBEAT,
     ENDPOINT_WORKER_REGISTER,
     IGNORED_REASON_CANCELLED,
@@ -29,11 +30,11 @@ from ..exceptions import (
 )
 from ..models import (
     Heartbeat,
-    ProgressUpdatePayload,
     TaskPayload,
     TaskResult,
     TokenResponse,
     WorkerCommand,
+    WorkerEventPayload,
     WorkerRegistration,
 )
 from ..utils import json_dumps, to_dict
@@ -261,15 +262,21 @@ class HttpTransport(Transport):
             logger.warning(f"Heartbeat failed: {e}")
             raise e
 
-    async def send_progress(self, progress: ProgressUpdatePayload) -> bool:
+    async def emit_event(self, event: WorkerEventPayload) -> bool:
+        # Optimization: Use WebSocket if available for faster delivery
         if self._ws_connection and not self._ws_connection.closed:
             try:
-                await self._ws_connection.send_json(to_dict(progress))
+                await self._ws_connection.send_json(to_dict(event))
                 return True
             except Exception as e:
-                logger.warning(f"Failed to send progress via WebSocket: {e}")
-                return False
-        return False
+                logger.warning(f"Failed to send event via WebSocket, falling back to POST: {e}")
+
+        try:
+            await self._request("POST", ENDPOINT_WORKER_EVENTS, json=event)
+            return True
+        except RxonError as e:
+            logger.error(f"Failed to emit event: {e}")
+            return False
 
     async def listen_for_commands(self) -> AsyncIterator[WorkerCommand]:
         if not self._session:

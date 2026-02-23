@@ -1,6 +1,13 @@
 from typing import List, NamedTuple
 
-from rxon.models import GPUInfo, InstalledModel, Resources, TaskPayload, WorkerCapabilities, WorkerRegistration
+from rxon.models import (
+    HardwareDevice,
+    InstalledArtifact,
+    Resources,
+    TaskPayload,
+    WorkerCapabilities,
+    WorkerRegistration,
+)
 from rxon.utils import to_dict
 
 
@@ -32,10 +39,15 @@ def test_worker_registration_serialization():
     reg = WorkerRegistration(
         worker_id="worker-01",
         worker_type="gpu",
-        supported_skills=["gen_image", "upscale"],
-        resources=Resources(max_concurrent_tasks=2, cpu_cores=8, gpu_info=GPUInfo("RTX 4090", 24)),
+        supported_skills=[],
+        resources=Resources(
+            max_concurrent_tasks=2,
+            cpu_cores=8,
+            ram_gb=64.0,
+            devices=[HardwareDevice("gpu", "RTX 4090", 24)],
+        ),
         installed_software={"python": "3.11", "cuda": "12.1"},
-        installed_models=[InstalledModel("sdxl", "1.0")],
+        installed_artifacts=[InstalledArtifact("sdxl", "1.0", "model")],
         capabilities=WorkerCapabilities(
             hostname="node-1", ip_address="192.168.1.5", cost_per_skill={"gen_image": 0.01}
         ),
@@ -43,7 +55,7 @@ def test_worker_registration_serialization():
 
     data = to_dict(reg)
     assert data["worker_id"] == "worker-01"
-    assert data["resources"]["gpu_info"]["model"] == "RTX 4090"
+    assert data["resources"]["devices"][0]["model"] == "RTX 4090"
     assert data["capabilities"]["cost_per_skill"]["gen_image"] == 0.01
 
 

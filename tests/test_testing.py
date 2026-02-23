@@ -22,7 +22,7 @@ async def test_mock_transport_flow():
         supported_skills=[],
         resources=Resources(1, 1),
         installed_software={},
-        installed_models=[],
+        installed_artifacts=[],
         capabilities=WorkerCapabilities("h", "i", {}),
     )
     success = await transport.register(reg)

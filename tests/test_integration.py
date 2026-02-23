@@ -1,18 +1,24 @@
 import asyncio
+import socket
+import time
+from uuid import uuid4
 
 import pytest
-from aiohttp import web
+from aiohttp import WSMsgType, web
 
 from rxon import HttpListener, create_transport
+from rxon.constants import EVENT_TYPE_PROGRESS, PROTOCOL_VERSION
 from rxon.exceptions import RxonNetworkError, RxonProtocolError
 from rxon.models import (
     Heartbeat,
-    ProgressUpdatePayload,
     Resources,
+    ResourcesUsage,
     TaskPayload,
     TaskResult,
+    TokenResponse,
     WorkerCapabilities,
     WorkerCommand,
+    WorkerEventPayload,
     WorkerRegistration,
 )
 from rxon.utils import to_dict
@@ -25,8 +31,6 @@ def unused_tcp_port_factory():
     """Factory to find an unused port."""
 
     def factory():
-        import socket
-
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(("127.0.0.1", 0))
             return s.getsockname()[1]
@@ -63,8 +67,6 @@ async def server(unused_tcp_port_factory):
             state["results"].append(payload)
             return {"status": "ok"}
         elif msg_type == "sts_token":
-            from rxon.models import TokenResponse
-
             return TokenResponse(access_token="new_refreshed_token", expires_in=3600, worker_id="test")
 
     await listener.start(handler=mock_handler)
@@ -99,18 +101,16 @@ async def test_full_cycle(server):
         reg = WorkerRegistration(
             worker_id=worker_id,
             worker_type="cpu",
-            supported_skills=["test"],
+            supported_skills=[],
             resources=Resources(1, 4),
             installed_software={},
-            installed_models=[],
+            installed_artifacts=[],
             capabilities=WorkerCapabilities("host", "127.0.0.1", {}),
         )
 
         original_handler = listener.handler
 
         async def check_version_handler(msg_type, payload, context):
-            from rxon.constants import PROTOCOL_VERSION
-
             assert context["protocol_version"] == PROTOCOL_VERSION
             return await original_handler(msg_type, payload, context)
 
@@ -123,7 +123,7 @@ async def test_full_cycle(server):
         listener.handler = original_handler
 
         # 3. Heartbeat
-        hb = Heartbeat(worker_id, "idle", 0.1, [], [], [], None)
+        hb = Heartbeat(worker_id, "idle", ResourcesUsage(10.0, 1.0, []), [], [], [], None)
         success = await transport.send_heartbeat(hb)
         assert success is not None
         assert len(state["heartbeats"]) == 1
@@ -135,13 +135,19 @@ async def test_full_cycle(server):
         # 5. Poll (With Task)
         # Inject task into server state
         mock_task = TaskPayload(
-            job_id="job-1", task_id="task-1", type="echo", params={"msg": "hello"}, tracing_context={}
+            job_id="job-1",
+            task_id="task-1",
+            type="echo",
+            params={"msg": "hello"},
+            tracing_context={},
+            priority=5.0,
         )
         state["tasks_queue"].append(mock_task)
 
         task = await transport.poll_task(timeout=1.0)
         assert task is not None
         assert task.job_id == "job-1"
+        assert task.priority == 5.0
         assert task.params["msg"] == "hello"
 
         # 6. Send Result
@@ -178,7 +184,7 @@ async def test_auth_refresh(server):
     await transport.connect()
 
     try:
-        hb = Heartbeat("worker-auth", "idle", 0.0, [], [], [], None)
+        hb = Heartbeat("worker-auth", "idle", ResourcesUsage(0.0, 0.5, []), [], [], [], None)
 
         # This call should:
         # 1. Send heartbeat (fail 401)
@@ -209,12 +215,10 @@ async def test_websocket_flow(server):
             await ws.send_json(to_dict(cmd))
 
             # 2. Listen for progress updates from worker
-            from aiohttp import WSMsgType
-
             async for msg in ws:
                 if msg.type == WSMsgType.TEXT:
                     data = msg.json()
-                    if data.get("event") == "progress":
+                    if data.get("event_type") == "progress":
                         state["results"].append(data)  # Store in results for verification
                         progress_received.set()
                         # Close connection after receiving progress to finish the test
@@ -240,17 +244,19 @@ async def test_websocket_flow(server):
         assert command.command == "stop_task"
         assert command.task_id == "task-99"
 
-        # Now send progress back to server
-        # Note: In a real app, listen_for_commands usually runs in a background task.
-        # Here we are in the same flow, but send_progress requires self._ws_connection to be set.
-        # listen_for_commands sets self._ws_connection BEFORE yielding?
-        # Let's check implementation: yes, it sets self._ws_connection = ws then iterates.
-        # So while we are inside the loop (or paused at yield), _ws_connection is active.
-
-        prog = ProgressUpdatePayload(
-            event="progress", task_id="task-99", job_id="job-1", progress=0.5, message="Halfway"
+        # Now send progress back to server via emit_event
+        prog_event = WorkerEventPayload(
+            event_id=str(uuid4()),
+            worker_id=worker_id,
+            origin_worker_id=worker_id,
+            event_type=EVENT_TYPE_PROGRESS,
+            payload={"progress": 0.5, "message": "Halfway"},
+            bubbling_chain=[],
+            target_task_id="task-99",
+            target_job_id="job-1",
+            timestamp=time.time(),
         )
-        sent = await transport.send_progress(prog)
+        sent = await transport.emit_event(prog_event)
         assert sent is True
 
         # Wait for server to receive it
@@ -258,7 +264,7 @@ async def test_websocket_flow(server):
 
         # Verify server state
         assert len(state["results"]) == 1
-        assert state["results"][0]["progress"] == 0.5
+        assert state["results"][0]["payload"]["progress"] == 0.5
 
     finally:
         await transport.close()
@@ -291,7 +297,7 @@ async def test_server_error_handling(server):
     listener.handler = validation_handler
 
     with pytest.raises(RxonProtocolError) as excinfo:
-        await transport.send_heartbeat(Heartbeat("w", "s", 0, [], [], [], None))
+        await transport.send_heartbeat(Heartbeat("w", "s", ResourcesUsage(0, 0, []), [], [], [], None))
     assert "400" in str(excinfo.value)
 
     await transport.close()
@@ -349,7 +355,7 @@ async def test_network_errors(unused_tcp_port_factory):
 
     # 3. Heartbeat should raise RxonError/NetworkError
     with pytest.raises(RxonNetworkError):
-        await transport.send_heartbeat(Heartbeat("w", "s", 0, [], [], [], None))
+        await transport.send_heartbeat(Heartbeat("w", "s", ResourcesUsage(0, 0, []), [], [], [], None))
 
     # 4. Result sending should raise RxonNetworkError (after retries)
     transport.result_retries = 1

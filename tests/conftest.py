@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from pathlib import Path
 
@@ -12,6 +13,4 @@ def event_loop_policy():
     """
     Prevent 'RuntimeError: Event loop is closed' issues with aiohttp in some environments.
     """
-    import asyncio
-
     return asyncio.get_event_loop_policy()

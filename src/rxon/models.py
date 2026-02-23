@@ -1,14 +1,18 @@
+from dataclasses import dataclass
 from typing import Any, NamedTuple
 
 __all__ = [
-    "GPUInfo",
+    "HardwareDevice",
+    "DeviceUsage",
+    "ResourcesUsage",
     "Resources",
-    "InstalledModel",
+    "InstalledArtifact",
+    "SkillInfo",
     "WorkerCapabilities",
     "FileMetadata",
     "WorkerRegistration",
     "TokenResponse",
-    "ProgressUpdatePayload",
+    "WorkerEventPayload",
     "WorkerCommand",
     "TaskPayload",
     "TaskError",
@@ -17,20 +21,74 @@ __all__ = [
 ]
 
 
-class GPUInfo(NamedTuple):
+class HardwareDevice(NamedTuple):
+    """
+    General description of a hardware device (GPU, TPU, NPU, etc.)
+    """
+
+    type: str  # gpu, tpu, npu, etc.
     model: str
-    vram_gb: int
+    memory_gb: int | None = None
+
+
+class DeviceUsage(NamedTuple):
+    """
+    Current usage metrics for a specific hardware device.
+    """
+
+    unit_id: str  # Index or UUID of the device
+    load_percent: float
+    memory_used_gb: float | None = None
+    temperature: float | None = None
+
+
+class ResourcesUsage(NamedTuple):
+    """
+    Detailed resource usage report.
+    """
+
+    cpu_load_percent: float
+    ram_used_gb: float
+    devices_usage: list[DeviceUsage] | None = None
 
 
 class Resources(NamedTuple):
     max_concurrent_tasks: int
     cpu_cores: int
-    gpu_info: GPUInfo | None = None
+    ram_gb: float | None = None
+    devices: list[HardwareDevice] | None = None
 
 
-class InstalledModel(NamedTuple):
+class InstalledArtifact(NamedTuple):
+    """
+    General description of an installed asset (Model, Binary, Dataset, etc.)
+    """
+
     name: str
     version: str
+    type: str | None = None  # model, binary, library, etc.
+
+
+@dataclass(frozen=True, slots=True)
+class SkillInfo:
+    """
+    Base class for skill definitions in the Hierarchical Logic Network.
+    Immutable and extensible via inheritance.
+    """
+
+    name: str
+    type: str | None = None
+    description: str | None = None
+    version: str | None = None
+    input_schema: dict[str, Any] | None = None
+    output_schema: dict[str, Any] | None = None
+    events_schema: dict[str, dict[str, Any]] | None = None
+    output_statuses: list[str] | None = None
+
+    def __lt__(self, other: Any) -> bool:
+        if not isinstance(other, SkillInfo):
+            return NotImplemented
+        return self.name < other.name
 
 
 class WorkerCapabilities(NamedTuple):
@@ -50,11 +108,12 @@ class FileMetadata(NamedTuple):
 class WorkerRegistration(NamedTuple):
     worker_id: str
     worker_type: str
-    supported_skills: list[str]
+    supported_skills: list[SkillInfo]
     resources: Resources
     installed_software: dict[str, str]
-    installed_models: list[InstalledModel]
+    installed_artifacts: list[InstalledArtifact]
     capabilities: WorkerCapabilities
+    skills_hash: str | None = None
 
 
 class TokenResponse(NamedTuple):
@@ -63,12 +122,18 @@ class TokenResponse(NamedTuple):
     worker_id: str
 
 
-class ProgressUpdatePayload(NamedTuple):
-    event: str
-    task_id: str
-    job_id: str
-    progress: float
-    message: str | None = None
+class WorkerEventPayload(NamedTuple):
+    event_id: str  # UUID for idempotency
+    worker_id: str  # Current sender ID (the one who emits to the transport)
+    origin_worker_id: str  # The atomic worker who originally created the event
+    event_type: str  # Matches a key in events_schema
+    payload: dict[str, Any]
+    bubbling_chain: list[str]  # List of holon IDs that bubbled this event
+    target_job_id: str | None = None
+    target_task_id: str | None = None
+    trace_context: dict[str, str] | None = None
+    priority: float = 0.0
+    timestamp: float | None = None
 
 
 class WorkerCommand(NamedTuple):
@@ -85,6 +150,8 @@ class TaskPayload(NamedTuple):
     params: dict[str, Any]
     tracing_context: dict[str, str]
     params_metadata: dict[str, FileMetadata] | None = None
+    priority: float = 0.0
+    deadline: float | None = None
 
 
 class TaskError(NamedTuple):
@@ -106,9 +173,10 @@ class TaskResult(NamedTuple):
 class Heartbeat(NamedTuple):
     worker_id: str
     status: str
-    load: float
+    usage: ResourcesUsage
     current_tasks: list[str]
-    supported_skills: list[str]
-    hot_cache: list[str]
+    supported_skills: list[SkillInfo] | None = None
+    hot_cache: list[str] | None = None
     skill_dependencies: dict[str, list[str]] | None = None
     hot_skills: list[str] | None = None
+    skills_hash: str | None = None

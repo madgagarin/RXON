@@ -5,11 +5,11 @@ from typing import Any
 
 from .models import (
     Heartbeat,
-    ProgressUpdatePayload,
     TaskPayload,
     TaskResult,
     TokenResponse,
     WorkerCommand,
+    WorkerEventPayload,
     WorkerRegistration,
 )
 from .transports.base import Transport
@@ -27,7 +27,7 @@ class MockTransport(Transport):
         self.registered: list[WorkerRegistration] = []
         self.heartbeats: list[Heartbeat] = []
         self.results: list[TaskResult] = []
-        self.progress_updates: list[ProgressUpdatePayload] = []
+        self.emitted_events: list[WorkerEventPayload] = []
         self.task_queue: Queue[TaskPayload] = Queue()
         self.command_queue: Queue[WorkerCommand] = Queue()
 
@@ -55,8 +55,8 @@ class MockTransport(Transport):
         self.heartbeats.append(heartbeat)
         return {"status": "ok"}
 
-    async def send_progress(self, progress: ProgressUpdatePayload) -> bool:
-        self.progress_updates.append(progress)
+    async def emit_event(self, event: WorkerEventPayload) -> bool:
+        self.emitted_events.append(event)
         return True
 
     async def listen_for_commands(self) -> AsyncIterator[WorkerCommand]:

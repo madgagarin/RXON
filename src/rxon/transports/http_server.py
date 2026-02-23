@@ -8,6 +8,7 @@ from ..constants import (
     AUTH_HEADER_WORKER,
     ENDPOINT_TASK_NEXT,
     ENDPOINT_TASK_RESULT,
+    ENDPOINT_WORKER_EVENTS,
     ENDPOINT_WORKER_HEARTBEAT,
     ENDPOINT_WORKER_REGISTER,
     PROTOCOL_VERSION,
@@ -15,6 +16,7 @@ from ..constants import (
     STS_TOKEN_ENDPOINT,
     WS_ENDPOINT,
 )
+from ..security import extract_cert_identity
 from .base import Listener
 
 T = TypeVar("T")
@@ -59,6 +61,8 @@ class HttpListener(Listener):
         self.app.router.add_post(ENDPOINT_TASK_RESULT, self._handle_result)
         # Heartbeat
         self.app.router.add_patch(ENDPOINT_WORKER_HEARTBEAT, self._handle_heartbeat)
+        # Generic Events (Bottom-Up)
+        self.app.router.add_post(ENDPOINT_WORKER_EVENTS, self._handle_event)
         # STS Token
         self.app.router.add_post(STS_TOKEN_ENDPOINT, self._handle_sts)
 
@@ -69,8 +73,6 @@ class HttpListener(Listener):
 
     @staticmethod
     def _extract_context(request: web.Request) -> dict[str, Any]:
-        from ..security import extract_cert_identity
-
         token = request.headers.get(AUTH_HEADER_WORKER)
         version = request.headers.get(PROTOCOL_VERSION_HEADER)
         cert_id = extract_cert_identity(request)
@@ -151,6 +153,21 @@ class HttpListener(Listener):
                 resp = await self.handler("heartbeat", payload, context)
                 return self._json_response(resp)
             return web.Response(status=500)
+        except web.HTTPException as e:
+            return self._json_response({"error": e.text or str(e)}, status=e.status)
+        except Exception as e:
+            return self._json_response({"error": str(e)}, status=500)
+
+    async def _handle_event(self, request: web.Request) -> web.Response:
+        try:
+            data = await request.json(loads=loads)
+            payload = data
+
+            context = self._extract_context(request)
+            if self.handler:
+                resp = await self.handler("event", payload, context)
+                return self._json_response(resp or {"status": "event_accepted"})
+            return self._json_response({"error": "No handler configured"}, status=500)
         except web.HTTPException as e:
             return self._json_response({"error": e.text or str(e)}, status=e.status)
         except Exception as e:

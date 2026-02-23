@@ -4,11 +4,11 @@ from typing import Any
 
 from ..models import (
     Heartbeat,
-    ProgressUpdatePayload,
     TaskPayload,
     TaskResult,
     TokenResponse,
     WorkerCommand,
+    WorkerEventPayload,
     WorkerRegistration,
 )
 
@@ -72,9 +72,9 @@ class Transport(ABC):
         pass
 
     @abstractmethod
-    async def send_progress(self, progress: ProgressUpdatePayload) -> bool:
+    async def emit_event(self, event: WorkerEventPayload) -> bool:
         """
-        Send real-time progress updates for a running task.
+        Emit a generic worker event (Bottom-Up Initiative).
         """
         pass
 

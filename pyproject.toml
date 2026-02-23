@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rxon"
-version = "1.0b3"
+version = "1.0b4"
 description = "RXON (Reverse Axon) - Lightweight Inter-node Reverse Communication Protocol."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -19,13 +19,13 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
     "Operating System :: OS Independent",
     "Typing :: Typed",
 ]
 dependencies = [
     "aiohttp>=3.12",
-    "orjson>=3.10",
+    "orjson>=3.11",
 ]
 
 [project.urls]
