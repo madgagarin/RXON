@@ -1,3 +1,8 @@
+# Copyright (c) 2025-2026 Dmitrii Gagarin aka madgagarin
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 from importlib.metadata import PackageNotFoundError, version
 
 from .blob import RXON_BLOB_SCHEME, calculate_config_hash, parse_uri
@@ -59,6 +64,7 @@ from .models import (
     InstalledArtifact,
     Resources,
     ResourcesUsage,
+    SkillInfo,
     TaskError,
     TaskPayload,
     TaskResult,
@@ -141,6 +147,7 @@ __all__ = [
     "InstalledArtifact",
     "Resources",
     "ResourcesUsage",
+    "SkillInfo",
     "TaskError",
     "TaskPayload",
     "TaskResult",

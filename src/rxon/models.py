@@ -1,3 +1,8 @@
+# Copyright (c) 2025-2026 Dmitrii Gagarin aka madgagarin
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
@@ -23,12 +28,13 @@ __all__ = [
 
 class HardwareDevice(NamedTuple):
     """
-    General description of a hardware device (GPU, TPU, NPU, etc.)
+    General description of a hardware device (GPU, TPU, Sensor, Actuator, etc.)
     """
 
-    type: str  # gpu, tpu, npu, etc.
+    type: str  # e.g., "gpu", "sensor", "robotic_arm"
     model: str
-    memory_gb: int | None = None
+    id: str | None = None
+    properties: dict[str, Any] | None = None  # Generic properties (e.g., {"memory_gb": 16, "precision": "fp32"})
 
 
 class DeviceUsage(NamedTuple):
@@ -36,10 +42,9 @@ class DeviceUsage(NamedTuple):
     Current usage metrics for a specific hardware device.
     """
 
-    unit_id: str  # Index or UUID of the device
+    unit_id: str
     load_percent: float
-    memory_used_gb: float | None = None
-    temperature: float | None = None
+    metrics: dict[str, Any] | None = None  # Generic metrics (e.g., {"temp": 45, "mem_used_gb": 4.2})
 
 
 class ResourcesUsage(NamedTuple):
@@ -67,6 +72,7 @@ class InstalledArtifact(NamedTuple):
     name: str
     version: str
     type: str | None = None  # model, binary, library, etc.
+    properties: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,5 +184,5 @@ class Heartbeat(NamedTuple):
     supported_skills: list[SkillInfo] | None = None
     hot_cache: list[str] | None = None
     skill_dependencies: dict[str, list[str]] | None = None
-    hot_skills: list[str] | None = None
+    hot_skills: list[SkillInfo] | None = None
     skills_hash: str | None = None

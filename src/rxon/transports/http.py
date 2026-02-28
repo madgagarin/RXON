@@ -1,3 +1,8 @@
+# Copyright (c) 2025-2026 Dmitrii Gagarin aka madgagarin
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 from asyncio import sleep
 from collections.abc import AsyncIterator
 from logging import getLogger
@@ -116,7 +121,6 @@ class HttpTransport(Transport):
                     headers=headers,
                     timeout=timeout,
                 ) as resp:
-                    # Check Protocol Version
                     server_version = resp.headers.get(PROTOCOL_VERSION_HEADER)
                     if server_version and server_version != PROTOCOL_VERSION and not self._version_warning_logged:
                         logger.warning(
@@ -167,7 +171,6 @@ class HttpTransport(Transport):
 
         url = f"{self.base_url}{STS_TOKEN_ENDPOINT}"
         try:
-            # We must send current headers (including protocol version)
             async with self._session.post(url, headers=self._headers) as resp:
                 if resp.status == 200:
                     data = await resp.json()

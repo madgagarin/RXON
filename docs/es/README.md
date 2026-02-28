@@ -4,7 +4,7 @@
 
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/release/python-3110/)
-[![Typing: Typed](https://img.shields.io/badge/Typing-Typed-brightgreen.svg)](https://peps.python.org/pep-0561/)
+[![PyPI version](https://img.shields.io/pypi/v/rxon.svg)](https://pypi.org/project/rxon/)
 
 **RXON** (Reverse Axon) es un protocolo de comunicación entre servicios de conexión inversa y ligero, diseñado para la arquitectura **[HLN (Hierarchical Logic Network)](https://github.com/avtomatika-ai/hln)**.
 
@@ -19,7 +19,7 @@ El nombre **RXON** deriva del término biológico *Axón* (la fibra nerviosa). E
 -   **Transportes Modulares**: Abstracción total de la capa de red. Soporte para HTTP, WebSocket, gRPC o Tor.
 -   **Sistema de Eventos Genéricos**: Mecanismo unificado para actualizaciones de progreso, alertas personalizadas y señales en tiempo real.
 -   **Cadena de Identidad Zero Trust**: Soporte nativo para el "bubbling" de eventos con `origin_worker_id` y `bubbling_chain` para prevenir suplantaciones en holarquías de múltiples capas.
--   **Telemetría Detallada de Recursos**: Los heartbeats incluyen métricas granulares de CPU, RAM y dispositivos de hardware especializados (GPU, TPU, NPU), incluyendo temperatura y niveles de memoria.
+-   **Telemetría Universal de Recursos**: Los heartbeats incluyen métricas granulares de CPU, RAM y cualquier dispositivo de hardware (GPU, TPU, Sensores, Robots) a través de `properties` y `metrics` extensibles.
 -   **Priorización y Deadlines de Tareas**: Soporte integrado para `priority` y `deadline` (timestamp) de ejecución, permitiendo programación local inteligente y autocancelación de tareas obsoletas.
 -   **Core sin Dependencias**: El núcleo no tiene dependencias externas (los transportes estándar usan `aiohttp` y `orjson`).
 -   **Contratos Estrictos**: Todos los mensajes (tareas, resultados, heartbeats) definen sus estructuras de datos a través de esquemas JSON, permitiendo validación automática y despacho inteligente.
@@ -36,8 +36,9 @@ El protocolo se divide en dos interfaces principales:
 
 Los Heartbeats de RXON proporcionan al Orquestador una visión detallada de la salud del Holón:
 -   `ResourcesUsage`: Consumo en tiempo real de CPU y RAM.
--   `DeviceUsage`: Carga por dispositivo, memoria y temperatura para aceleradores.
+-   `DeviceUsage`: Carga por dispositivo y `metrics` personalizadas (ej. temperatura, memoria, nivel de batería) para cualquier hardware.
 -   `hot_cache`: Lista de artefactos/modelos cargados actualmente en memoria.
+-   `hot_skills`: Información detallada sobre las habilidades listas para ejecución inmediata.
 
 ### Contratos de Habilidades
 

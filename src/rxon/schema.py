@@ -1,7 +1,11 @@
+# Copyright (c) 2025-2026 Dmitrii Gagarin aka madgagarin
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 from __future__ import annotations
 
-from dataclasses import fields, is_dataclass
-from inspect import Parameter
+from dataclasses import MISSING, fields, is_dataclass
 from typing import Any, Callable, Union, get_args, get_origin, get_type_hints
 
 try:
@@ -35,17 +39,21 @@ def extract_json_schema(
         for f in fields(schema_type):
             properties[f.name] = _python_type_to_json_schema(f.type)
             # If no default value, mark as required, but check if it's Optional
-            if f.default is Parameter.empty and f.default_factory is Parameter.empty and not _is_optional(f.type):
+            if f.default is MISSING and f.default_factory is MISSING and not _is_optional(f.type):
                 required.append(f.name)
 
         return {
             "type": "object",
             "properties": properties,
-            "required": required if required else None,
+            "required": required if required else [],
             "additionalProperties": False,
         }
 
-    return None
+    # Primitives support
+    try:
+        return _python_type_to_json_schema(schema_type)
+    except Exception:
+        return None
 
 
 def _is_optional(tp: Any) -> bool:
@@ -141,7 +149,7 @@ def validate_data(data: Any, schema: dict[str, Any] | None) -> tuple[bool, str |
             return False, f"Expected object, got {type(data).__name__}"
 
         # Check required fields
-        required = schema.get("required", [])
+        required = schema.get("required") or []
         for field in required:
             if field not in data:
                 return False, f"Missing required field: '{field}'"

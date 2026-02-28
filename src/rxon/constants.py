@@ -1,3 +1,8 @@
+# Copyright (c) 2025-2026 Dmitrii Gagarin aka madgagarin
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 """
 Centralized constants for the RXON protocol.
 Shared between Orchestrator and Worker SDK.
@@ -46,16 +51,12 @@ __all__ = [
     "PROTOCOL_VERSION_HEADER",
 ]
 
-# --- Protocol Metadata ---
-PROTOCOL_VERSION = "1.0b4"
+PROTOCOL_VERSION = "1.0b5"
 PROTOCOL_VERSION_HEADER = "X-RXON-Version"
 
-# --- Auth Headers ---
 AUTH_HEADER_CLIENT = "X-Client-Token"
 AUTH_HEADER_WORKER = "X-Worker-Token"
 
-# --- Error Codes ---
-# Error codes returned by workers in the result payload
 ERROR_CODE_TRANSIENT = "TRANSIENT_ERROR"
 ERROR_CODE_PERMANENT = "PERMANENT_ERROR"
 ERROR_CODE_INVALID_INPUT = "INVALID_INPUT_ERROR"
@@ -67,14 +68,12 @@ ERROR_CODE_LIMIT_EXCEEDED = "LIMIT_EXCEEDED_ERROR"
 ERROR_CODE_CONTRACT_VIOLATION = "CONTRACT_VIOLATION_ERROR"
 ERROR_CODE_DEPENDENCY_MISSING = "DEPENDENCY_MISSING_ERROR"
 
-# --- Ignored Result Reasons ---
 IGNORED_REASON_LATE = "deadline_exceeded"
 IGNORED_REASON_CANCELLED = "job_cancelled"
 IGNORED_REASON_NOT_FOUND = "job_not_found"
 IGNORED_REASON_MISMATCH = "worker_mismatch"
 IGNORED_REASON_STALE = "stale_task"
 
-# --- Heartbeat Response Keys ---
 HB_RESP_REQUIRE_FULL_SYNC = "require_full_sync"
 HB_RESP_CANCEL_TASKS = "cancel_task_ids"
 
@@ -82,30 +81,24 @@ ERROR_CODE_DEPENDENCY = "DEPENDENCY_ERROR"
 ERROR_CODE_SECURITY = "SECURITY_ERROR"
 ERROR_CODE_INTERNAL = "INTERNAL_ERROR"
 
-# --- Task Statuses ---
-# Standard statuses for task results
 TASK_STATUS_SUCCESS = "success"
 TASK_STATUS_FAILURE = "failure"
 TASK_STATUS_CANCELLED = "cancelled"
 
-# --- Commands (WebSocket) ---
 COMMAND_CANCEL_TASK = "cancel_task"
 EVENT_TYPE_PROGRESS = "progress"
 
-# --- Endpoints ---
 WORKER_API_PREFIX = "/_worker"
 
 STS_TOKEN_ENDPOINT = f"{WORKER_API_PREFIX}/auth/token"
 WS_ENDPOINT = f"{WORKER_API_PREFIX}/ws"
 
-# Routes for REST API interaction
 ENDPOINT_WORKER_REGISTER = f"{WORKER_API_PREFIX}/workers/register"
 ENDPOINT_TASK_NEXT = f"{WORKER_API_PREFIX}/workers/{{worker_id}}/tasks/next"
 ENDPOINT_TASK_RESULT = f"{WORKER_API_PREFIX}/tasks/result"
 ENDPOINT_WORKER_HEARTBEAT = f"{WORKER_API_PREFIX}/workers/{{worker_id}}"
 ENDPOINT_WORKER_EVENTS = f"{WORKER_API_PREFIX}/events"
 
-# --- Job Statuses ---
 JOB_STATUS_PENDING = "pending"
 JOB_STATUS_WAITING_FOR_WORKER = "waiting_for_worker"
 JOB_STATUS_RUNNING = "running"

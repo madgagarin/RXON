@@ -1,3 +1,8 @@
+# Copyright (c) 2025-2026 Dmitrii Gagarin aka madgagarin
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
@@ -53,21 +58,14 @@ class HttpListener(Listener):
         pass
 
     def _setup_routes(self):
-        # Registration
         self.app.router.add_post(ENDPOINT_WORKER_REGISTER, self._handle_register)
-        # Polling
         self.app.router.add_get(ENDPOINT_TASK_NEXT, self._handle_poll)
-        # Results
         self.app.router.add_post(ENDPOINT_TASK_RESULT, self._handle_result)
-        # Heartbeat
         self.app.router.add_patch(ENDPOINT_WORKER_HEARTBEAT, self._handle_heartbeat)
-        # Generic Events (Bottom-Up)
         self.app.router.add_post(ENDPOINT_WORKER_EVENTS, self._handle_event)
-        # STS Token
         self.app.router.add_post(STS_TOKEN_ENDPOINT, self._handle_sts)
 
-        # WebSocket endpoint
-        # Supporting both /_worker/ws and /_worker/ws/{worker_id} for compatibility
+        # WebSocket endpoint (supporting both formats for compatibility)
         self.app.router.add_get(WS_ENDPOINT, self._handle_ws)
         self.app.router.add_get(f"{WS_ENDPOINT}/{{worker_id}}", self._handle_ws)
 

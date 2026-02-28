@@ -4,7 +4,7 @@
 
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/release/python-3110/)
-[![Typing: Typed](https://img.shields.io/badge/Typing-Typed-brightgreen.svg)](https://peps.python.org/pep-0561/)
+[![PyPI version](https://img.shields.io/pypi/v/rxon.svg)](https://pypi.org/project/rxon/)
 
 **RXON** (Reverse Axon) is a lightweight reverse-connection inter-service communication protocol designed for the **[HLN (Hierarchical Logic Network)](https://github.com/avtomatika-ai/hln)** architecture.
 
@@ -19,7 +19,7 @@ The name **RXON** is derived from the biological term *Axon* (the nerve fiber). 
 -   **Pluggable Transports**: Full abstraction from the network layer. The same code can run over HTTP, WebSocket, gRPC, or Tor.
 -   **Generic Event System**: Unified signaling mechanism for progress updates, custom alerts, and real-time metrics.
 -   **Zero Trust Identity Chain**: Built-in support for hierarchical event bubbling with `origin_worker_id` and `bubbling_chain` to prevent spoofing in multi-layer holarchies.
--   **Detailed Resource Telemetry**: Heartbeats include granular usage metrics for CPU, RAM, and specialized hardware devices (GPU, TPU, NPU) including temperature and memory levels.
+-   **Universal Resource Telemetry**: Heartbeats include granular usage metrics for CPU, RAM, and any hardware devices (GPU, TPU, Sensors, Robots) via extensible `properties` and `metrics`.
 -   **Task Prioritization & Deadlines**: Built-in support for task `priority` and execution `deadline` (timestamp) to enable smart local scheduling and auto-cancellation of stale tasks.
 -   **Zero Dependency Core**: The protocol core has no external dependencies (standard transports use `aiohttp` and `orjson`).
 -   **Strictly Typed Contracts**: All messages (tasks, results, heartbeats) define their data structures via JSON Schemas, enabling automated validation and smart dispatching.
@@ -36,8 +36,9 @@ The protocol is divided into two main interfaces:
 
 RXON Heartbeats provide the Orchestrator with a detailed view of the Holon's health:
 -   `ResourcesUsage`: Real-time CPU and RAM consumption.
--   `DeviceUsage`: Per-device load, memory, and temperature for accelerators.
+-   `DeviceUsage`: Per-device load and custom `metrics` (e.g., temperature, memory, battery level) for any hardware.
 -   `hot_cache`: List of artifacts/models currently loaded in memory.
+-   `hot_skills`: Detailed info about skills currently ready for immediate execution.
 
 ### Skill Contracts
 

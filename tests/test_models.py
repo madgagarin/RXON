@@ -1,3 +1,8 @@
+# Copyright (c) 2025-2026 Dmitrii Gagarin aka madgagarin
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 from typing import List, NamedTuple
 
 from rxon.models import (
@@ -35,7 +40,7 @@ def test_to_dict_nested():
 
 
 def test_worker_registration_serialization():
-    # Construct a complex registration object
+    # Construct a complex registration object matching 1.0b5 spec
     reg = WorkerRegistration(
         worker_id="worker-01",
         worker_type="gpu",
@@ -44,10 +49,16 @@ def test_worker_registration_serialization():
             max_concurrent_tasks=2,
             cpu_cores=8,
             ram_gb=64.0,
-            devices=[HardwareDevice("gpu", "RTX 4090", 24)],
+            devices=[
+                HardwareDevice(
+                    type="gpu", model="RTX 4090", id="gpu-0", properties={"vram_gb": 24, "cuda_cores": 16384}
+                )
+            ],
         ),
         installed_software={"python": "3.11", "cuda": "12.1"},
-        installed_artifacts=[InstalledArtifact("sdxl", "1.0", "model")],
+        installed_artifacts=[
+            InstalledArtifact(name="sdxl", version="1.0", type="model", properties={"architecture": "diffusion"})
+        ],
         capabilities=WorkerCapabilities(
             hostname="node-1", ip_address="192.168.1.5", cost_per_skill={"gen_image": 0.01}
         ),
@@ -56,6 +67,8 @@ def test_worker_registration_serialization():
     data = to_dict(reg)
     assert data["worker_id"] == "worker-01"
     assert data["resources"]["devices"][0]["model"] == "RTX 4090"
+    assert data["resources"]["devices"][0]["properties"]["vram_gb"] == 24
+    assert data["installed_artifacts"][0]["properties"]["architecture"] == "diffusion"
     assert data["capabilities"]["cost_per_skill"]["gen_image"] == 0.01
 
 
@@ -66,3 +79,5 @@ def test_model_field_verification():
     assert "task_id" in fields
     assert "params" in fields
     assert "tracing_context" in fields
+    assert "priority" in fields
+    assert "deadline" in fields
