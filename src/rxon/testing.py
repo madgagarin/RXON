@@ -4,11 +4,10 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 from asyncio import Queue, wait_for
-from asyncio import TimeoutError as AsyncTimeoutError
 from collections.abc import AsyncIterator
 from typing import Any
 
-from .models import (
+from rxon.models import (
     Heartbeat,
     TaskPayload,
     TaskResult,
@@ -17,15 +16,17 @@ from .models import (
     WorkerEventPayload,
     WorkerRegistration,
 )
-from .transports.base import Transport
+from rxon.transports.base import Transport
+from rxon.utils import from_dict
 
 
 class MockTransport(Transport):
     """
     In-memory mock transport for testing Workers without a real Orchestrator.
+    Imitates real transport behavior by ensuring returned objects are proper models.
     """
 
-    def __init__(self, worker_id: str = "mock-worker", token: str = "mock-token"):
+    def __init__(self, worker_id: str = "mock-worker", token: str = "mock-token", **kwargs: Any):
         self.worker_id = worker_id
         self.token = token
         self.connected = False
@@ -33,8 +34,9 @@ class MockTransport(Transport):
         self.heartbeats: list[Heartbeat] = []
         self.results: list[TaskResult] = []
         self.emitted_events: list[WorkerEventPayload] = []
-        self.task_queue: Queue[TaskPayload] = Queue()
-        self.command_queue: Queue[WorkerCommand] = Queue()
+        self.task_queue: Queue[Any] = Queue()
+        self.command_queue: Queue[Any] = Queue()
+        self.extra_config = kwargs
 
     async def connect(self) -> None:
         self.connected = True
@@ -44,19 +46,22 @@ class MockTransport(Transport):
 
     async def register(self, registration: WorkerRegistration) -> dict[str, Any]:
         self.registered.append(registration)
-        return {"status": "registered"}
+        return {"status": "registered", "worker_id": self.worker_id}
 
     async def poll_task(self, timeout: float = 30.0) -> TaskPayload | None:
         try:
-            return await wait_for(self.task_queue.get(), timeout=timeout)
-        except AsyncTimeoutError:
+            item = await wait_for(self.task_queue.get(), timeout=timeout)
+            if isinstance(item, dict):
+                return from_dict(TaskPayload, item)
+            return item
+        except Exception:
             return None
 
-    async def send_result(self, result: TaskResult, max_retries: int = 3, initial_delay: float = 0.1) -> bool:
+    async def send_result(self, result: TaskResult) -> bool:
         self.results.append(result)
         return True
 
-    async def send_heartbeat(self, heartbeat: Heartbeat) -> dict[str, Any] | None:
+    async def send_heartbeat(self, heartbeat: Heartbeat) -> dict[str, Any]:
         self.heartbeats.append(heartbeat)
         return {"status": "ok"}
 
@@ -66,16 +71,20 @@ class MockTransport(Transport):
 
     async def listen_for_commands(self) -> AsyncIterator[WorkerCommand]:
         while self.connected:
-            cmd = await self.command_queue.get()
-            yield cmd
+            item = await self.command_queue.get()
+            if isinstance(item, dict):
+                yield from_dict(WorkerCommand, item)
+            else:
+                yield item
 
-    async def refresh_token(self) -> TokenResponse | None:
-        return TokenResponse(access_token=f"refreshed-{self.token}", expires_in=3600, worker_id=self.worker_id)
+    async def refresh_token(self) -> TokenResponse:
+        self.token = "refreshed-mock-token"
+        return TokenResponse(access_token=self.token, expires_in=3600, worker_id=self.worker_id)
 
-    def push_task(self, task: TaskPayload):
+    def push_task(self, task: TaskPayload | dict[str, Any]):
         """Inject a task into the queue for the worker to pick up."""
         self.task_queue.put_nowait(task)
 
-    def push_command(self, command: WorkerCommand):
+    def push_command(self, command: WorkerCommand | dict[str, Any]):
         """Inject a command into the queue."""
         self.command_queue.put_nowait(command)

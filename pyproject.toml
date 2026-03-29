@@ -4,52 +4,60 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rxon"
-version = "1.0b5"
-description = "RXON (Reverse Axon) - Lightweight Inter-node Reverse Communication Protocol."
+dynamic = ["version"]
+description = "RXON (Reverse Axon) - Lightweight Inter-node Reverse Communication Protocol"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
     {name = "Dmitrii Gagarin", email = "madgagarin@gmail.com"},
 ]
-keywords = ["robotics", "iot", "sensor", "rxon", "reverse", "hln", "protocol", "distributed-systems", "holarchy", "holon"]
+license = {text = "MPL-2.0"}
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "Intended Audience :: System Administrators",
-    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
-    "Operating System :: OS Independent",
-    "Typing :: Typed",
 ]
 dependencies = [
-    "aiohttp>=3.11",
-    "orjson>=3.11",
+    "aiohttp>=3.11.0",
+    "orjson>=3.10.0",
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/madgagarin/rxon"
-"Repository" = "https://github.com/madgagarin/rxon"
-"Bug Tracker" = "https://github.com/madgagarin/rxon/issues"
+Homepage = "https://github.com/madgagarin/rxon"
+Repository = "https://github.com/madgagarin/rxon"
 
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-rxon = ["py.typed"]
+[tool.setuptools.dynamic]
+version = {attr = "rxon.constants.PROTOCOL_VERSION"}
 
 [tool.ruff]
-src = ["src"]
-target-version = "py311"
 line-length = 120
+target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "I", "B", "A", "SIM", "C4"]
+select = ["E", "F", "I", "UP", "TID"]
+ignore = []
 
-[tool.ruff.format]
-quote-style = "double"
+[tool.ruff.lint.isort]
+known-first-party = ["rxon"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"avtomatika".msg = "Use 'from <module> import <name>' style instead of full import."
+"avtomatika_worker".msg = "Use 'from <module> import <name>' style instead of full import."
+"matryoshka".msg = "Use 'from <module> import <name>' style instead of full import."
+
+[tool.ruff.lint.pyupgrade]
+keep-runtime-typing = false
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

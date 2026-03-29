@@ -9,9 +9,16 @@ from logging import getLogger
 from ssl import SSLContext
 from typing import Any, cast
 
-from aiohttp import ClientError, ClientSession, ClientTimeout, TCPConnector, WSMsgType
+from aiohttp import (
+    ClientError,
+    ClientSession,
+    ClientTimeout,
+    ContentTypeError,
+    TCPConnector,
+    WSMsgType,
+)
 
-from ..constants import (
+from rxon.constants import (
     AUTH_HEADER_WORKER,
     ENDPOINT_TASK_NEXT,
     ENDPOINT_TASK_RESULT,
@@ -20,20 +27,13 @@ from ..constants import (
     ENDPOINT_WORKER_REGISTER,
     IGNORED_REASON_CANCELLED,
     IGNORED_REASON_LATE,
-    IGNORED_REASON_MISMATCH,
-    IGNORED_REASON_NOT_FOUND,
     PROTOCOL_VERSION,
     PROTOCOL_VERSION_HEADER,
     STS_TOKEN_ENDPOINT,
     WS_ENDPOINT,
 )
-from ..exceptions import (
-    RxonAuthError,
-    RxonError,
-    RxonNetworkError,
-    RxonProtocolError,
-)
-from ..models import (
+from rxon.exceptions import RxonAuthError, RxonError, RxonNetworkError, RxonProtocolError
+from rxon.models import (
     Heartbeat,
     TaskPayload,
     TaskResult,
@@ -42,17 +42,15 @@ from ..models import (
     WorkerEventPayload,
     WorkerRegistration,
 )
-from ..utils import json_dumps, to_dict
+from rxon.utils import from_dict, json_dumps, loads, to_dict
+
 from .base import Transport
 
 logger = getLogger(__name__)
 
 
 class HttpTransport(Transport):
-    """
-    HTTP implementation of the RXON Transport using aiohttp.
-    Supports Long-Polling for tasks and WebSocket for commands.
-    """
+    """HTTP implementation of RXON Transport using aiohttp."""
 
     def __init__(
         self,
@@ -64,6 +62,7 @@ class HttpTransport(Transport):
         verify_ssl: bool = True,
         result_retries: int = 3,
         result_retry_delay: float = 0.1,
+        **kwargs: Any,
     ):
         self.base_url = base_url.rstrip("/")
         self.worker_id = worker_id
@@ -80,6 +79,7 @@ class HttpTransport(Transport):
         self.result_retry_delay = result_retry_delay
         self._ws_connection = None
         self._version_warning_logged = False
+        self.extra_config = kwargs
 
     async def connect(self) -> None:
         if not self._session:
@@ -102,157 +102,92 @@ class HttpTransport(Transport):
         json: Any | None = None,
         timeout: ClientTimeout | None = None,
     ) -> Any:
-        """
-        Internal helper to execute HTTP requests with automatic 401 retry and error handling.
-        """
         if not self._session:
             raise RxonNetworkError("Transport not connected. Call connect() first.")
 
         url = f"{self.base_url}{endpoint}"
         headers = self._headers.copy()
-        attempts = 2
-        for attempt in range(attempts):
+        for attempt in range(2):
             try:
                 async with self._session.request(
-                    method,
-                    url,
-                    params=params,
-                    json=json,
-                    headers=headers,
-                    timeout=timeout,
+                    method, url, params=params, json=json, headers=headers, timeout=timeout
                 ) as resp:
-                    server_version = resp.headers.get(PROTOCOL_VERSION_HEADER)
-                    if server_version and server_version != PROTOCOL_VERSION and not self._version_warning_logged:
-                        logger.warning(
-                            f"RXON Protocol Version Mismatch! "
-                            f"Orchestrator: {server_version}, Worker: {PROTOCOL_VERSION}. "
-                            "Please update your SDK."
-                        )
+                    v = resp.headers.get(PROTOCOL_VERSION_HEADER)
+                    if v and v != PROTOCOL_VERSION and not self._version_warning_logged:
+                        logger.warning(f"RXON Protocol Version Mismatch! Orchestrator: {v}, Worker: {PROTOCOL_VERSION}")
                         self._version_warning_logged = True
 
                     if resp.status == 204:
                         return None
 
                     if resp.status == 401:
-                        if attempt == 0:
-                            logger.warning(f"Unauthorized (401) from {endpoint}. Refreshing token.")
-                            if await self.refresh_token():
-                                headers = self._headers.copy()  # Update headers with new token
-                                continue
-                            else:
-                                raise RxonAuthError(f"Token refresh failed after 401 from {endpoint}")
-                        else:
-                            raise RxonAuthError(f"Unauthorized (401) from {endpoint} after retry")
+                        if attempt == 0 and await self.refresh_token():
+                            headers = self._headers.copy()
+                            continue
+                        raise RxonAuthError(f"Unauthorized (401) from {endpoint}")
 
                     if resp.status >= 400:
                         text = await resp.text()
-                        raise RxonProtocolError(
-                            f"HTTP {resp.status}: {text}", details={"status": resp.status, "body": text}
-                        )
+                        raise RxonProtocolError(f"HTTP {resp.status}: {text}", details={"status": resp.status})
 
-                    return await resp.json()
+                    return await resp.json(loads=loads)
 
+            except ContentTypeError as e:
+                raise RxonProtocolError(f"Response is not a valid JSON: {e}") from e
             except (ClientError, TimeoutError) as e:
-                # If it's a network/timeout error, we wrap it
-                raise RxonNetworkError(f"Network error during {method} {endpoint}: {str(e)}") from e
+                raise RxonNetworkError(f"Network error during {method} {endpoint}: {e}") from e
             except RxonError:
-                # Re-raise known errors
                 raise
             except Exception as e:
-                # Catch-all for unexpected errors
                 logger.exception("Unexpected error in transport")
                 raise RxonError(f"Unexpected transport error: {e}") from e
         return None
 
     async def refresh_token(self) -> TokenResponse | None:
         if not self._session:
-            logger.error("Cannot refresh token: Session not initialized")
             return None
-
         url = f"{self.base_url}{STS_TOKEN_ENDPOINT}"
         try:
             async with self._session.post(url, headers=self._headers) as resp:
                 if resp.status == 200:
-                    data = await resp.json()
-                    valid_fields = {k: v for k, v in data.items() if k in TokenResponse._fields}
-                    token_response = TokenResponse(**valid_fields)
-                    self.token = token_response.access_token
+                    data = await resp.json(loads=loads)
+                    res = from_dict(TokenResponse, data)
+                    self.token = res.access_token
                     self._headers[AUTH_HEADER_WORKER] = self.token
-                    logger.info(f"Token refreshed successfully. Expires in {token_response.expires_in}s")
-                    return token_response
-                else:
-                    logger.error(f"Failed to refresh token: HTTP {resp.status}")
+                    logger.info(f"Token refreshed. Expires in {res.expires_in}s")
+                    return res
         except Exception as e:
             logger.error(f"Error refreshing token: {e}")
         return None
 
     async def register(self, registration: WorkerRegistration) -> Any:
-        """
-        Register the holon shell with the orchestrator.
-        Raises RxonError on failure.
-        """
         return await self._request("POST", ENDPOINT_WORKER_REGISTER, json=registration)
 
     async def poll_task(self, timeout: float = 30.0) -> TaskPayload | None:
-        """
-        Long-poll for the next available task.
-        Raises RxonError on network/protocol failures.
-        """
         endpoint = ENDPOINT_TASK_NEXT.format(worker_id=self.worker_id)
-        client_timeout = ClientTimeout(total=timeout + 5)
+        data = await self._request("GET", endpoint, timeout=ClientTimeout(total=timeout + 5))
+        return from_dict(TaskPayload, data) if data else None
 
-        data = await self._request("GET", endpoint, timeout=client_timeout)
-
-        if data:
-            try:
-                valid_fields = {k: v for k, v in data.items() if k in TaskPayload._fields}
-                return TaskPayload(**valid_fields)
-            except TypeError as e:
-                raise RxonProtocolError(f"Invalid TaskPayload from server: {e}", details=data) from e
-        return None
-
-    async def send_result(
-        self, result: TaskResult, max_retries: int | None = None, initial_delay: float | None = None
-    ) -> bool:
-        """
-        Send task execution result back to orchestrator.
-        Retries on RxonNetworkError.
-        Raises RxonError if all retries fail.
-        """
+    async def send_result(self, result: TaskResult, max_retries: int | None = None, delay: float | None = None) -> bool:
         retries = max_retries if max_retries is not None else self.result_retries
-        delay = initial_delay if initial_delay is not None else self.result_retry_delay
-
+        wait = delay if delay is not None else self.result_retry_delay
         last_error = None
         for i in range(retries):
             try:
-                resp_data = await self._request("POST", ENDPOINT_TASK_RESULT, json=result)
-                if isinstance(resp_data, dict) and resp_data.get("status") == "ignored":
-                    reason = resp_data.get("reason")
-                    msg = resp_data.get("message", "No message provided")
-
-                    log_msg = f"Result for job {result.job_id} ignored. Reason: {reason}. Message: {msg}"
-
-                    if reason == IGNORED_REASON_LATE:
-                        logger.warning(log_msg)
-                    elif reason == IGNORED_REASON_CANCELLED:
-                        logger.info(log_msg)
-                    elif reason == IGNORED_REASON_NOT_FOUND:
-                        logger.error(log_msg)
-                    elif reason == IGNORED_REASON_MISMATCH:
-                        logger.critical(log_msg)
+                resp = await self._request("POST", ENDPOINT_TASK_RESULT, json=result)
+                if isinstance(resp, dict) and resp.get("status") == "ignored":
+                    reason = resp.get("reason")
+                    msg = f"Result ignored. Reason: {reason}. Job: {result.job_id}"
+                    if reason in (IGNORED_REASON_LATE, IGNORED_REASON_CANCELLED):
+                        logger.info(msg)
                     else:
-                        logger.warning(log_msg)
-
+                        logger.warning(msg)
                     return False
                 return True
             except RxonNetworkError as e:
-                logger.warning(f"Network error sending result (attempt {i + 1}/{retries}): {e}")
                 last_error = e
-            except RxonError as e:
-                logger.error(f"Protocol/Auth error sending result: {e}")
-                raise e
             if i < retries - 1:
-                await sleep(delay * (2**i))
+                await sleep(wait * (2**i))
         if last_error:
             raise last_error
         return False
@@ -266,47 +201,38 @@ class HttpTransport(Transport):
             raise e
 
     async def emit_event(self, event: WorkerEventPayload) -> bool:
-        # Optimization: Use WebSocket if available for faster delivery
         if self._ws_connection and not self._ws_connection.closed:
             try:
                 await self._ws_connection.send_json(to_dict(event))
                 return True
-            except Exception as e:
-                logger.warning(f"Failed to send event via WebSocket, falling back to POST: {e}")
-
+            except Exception:
+                pass
         try:
             await self._request("POST", ENDPOINT_WORKER_EVENTS, json=event)
             return True
-        except RxonError as e:
-            logger.error(f"Failed to emit event: {e}")
+        except RxonError:
             return False
 
     async def listen_for_commands(self) -> AsyncIterator[WorkerCommand]:
         if not self._session:
             return
-
-        ws_url = self.base_url.replace("http", "ws", 1) + WS_ENDPOINT
+        ws_url = f"{self.base_url.replace('http', 'ws', 1)}{WS_ENDPOINT}/{self.worker_id}"
         try:
             async with self._session.ws_connect(ws_url, headers=self._headers) as ws:
                 self._ws_connection = cast(Any, ws)
-                logger.info(f"Connected to WebSocket: {ws_url}")
-
                 async for msg in ws:
                     if msg.type == WSMsgType.TEXT:
                         try:
-                            data = msg.json()
-                            valid_fields = {k: v for k, v in data.items() if k in WorkerCommand._fields}
-                            yield WorkerCommand(**valid_fields)
+                            data = msg.json(loads=loads)
+                            yield from_dict(WorkerCommand, data)
                         except Exception as e:
-                            logger.warning(f"Invalid command received: {e}")
+                            logger.error(f"Failed to parse WebSocket command: {e}")
                     elif msg.type == WSMsgType.ERROR:
-                        logger.error(f"WebSocket connection closed with error: {ws.exception()}")
                         break
-        except (ClientError, TimeoutError) as e:
-            logger.error(f"WebSocket connection error: {e}")
-            raise RxonNetworkError(f"WebSocket connection failed: {e}") from e
         except Exception as e:
-            logger.error(f"WebSocket unexpected error: {e}")
-            raise RxonError(f"WebSocket error: {e}") from e
+            if not isinstance(e, RxonError):
+                logger.error(f"WebSocket connection error: {e}")
+                raise RxonError(f"WebSocket connection error: {e}") from e
+            raise
         finally:
             self._ws_connection = None

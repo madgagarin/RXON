@@ -6,7 +6,8 @@
 from ssl import SSLContext
 from typing import Any
 
-from ..testing import MockTransport
+from rxon.testing import MockTransport
+
 from .base import Transport
 from .http import HttpTransport
 
@@ -22,6 +23,6 @@ def create_transport(
         return HttpTransport(base_url=url, worker_id=worker_id, token=token, ssl_context=ssl_context, **kwargs)
 
     if url.startswith("mock://"):
-        return MockTransport(worker_id=worker_id, token=token)
+        return MockTransport(worker_id=worker_id, token=token, **kwargs)
 
     raise ValueError(f"Unsupported transport scheme in URL: {url}")

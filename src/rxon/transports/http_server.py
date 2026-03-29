@@ -7,9 +7,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
 from aiohttp import web
-from orjson import loads
 
-from ..constants import (
+from rxon.constants import (
     AUTH_HEADER_WORKER,
     ENDPOINT_TASK_NEXT,
     ENDPOINT_TASK_RESULT,
@@ -21,7 +20,9 @@ from ..constants import (
     STS_TOKEN_ENDPOINT,
     WS_ENDPOINT,
 )
-from ..security import extract_cert_identity
+from rxon.security import extract_cert_identity
+from rxon.utils import json_dumps, loads, to_dict
+
 from .base import Listener
 
 T = TypeVar("T")
@@ -65,8 +66,7 @@ class HttpListener(Listener):
         self.app.router.add_post(ENDPOINT_WORKER_EVENTS, self._handle_event)
         self.app.router.add_post(STS_TOKEN_ENDPOINT, self._handle_sts)
 
-        # WebSocket endpoint (supporting both formats for compatibility)
-        self.app.router.add_get(WS_ENDPOINT, self._handle_ws)
+        # WebSocket endpoint
         self.app.router.add_get(f"{WS_ENDPOINT}/{{worker_id}}", self._handle_ws)
 
     @staticmethod
@@ -84,7 +84,9 @@ class HttpListener(Listener):
         }
 
     def _json_response(self, data: Any, **kwargs: Any) -> web.Response:
-        return web.json_response(data, **kwargs)
+        if isinstance(data, web.Response):
+            return data
+        return web.json_response(to_dict(data), dumps=json_dumps, **kwargs)
 
     async def _handle_register(self, request: web.Request) -> web.Response:
         try:
@@ -113,7 +115,7 @@ class HttpListener(Listener):
             if self.handler:
                 task = await self.handler("poll", worker_id, context)
                 if task:
-                    return self._json_response(task._asdict() if hasattr(task, "_asdict") else task)
+                    return self._json_response(task)
                 return web.Response(status=204)
             return web.Response(status=500)
         except web.HTTPException as e:
@@ -176,7 +178,7 @@ class HttpListener(Listener):
             context = self._extract_context(request)
             if self.handler:
                 token_data = await self.handler("sts_token", None, context)
-                return self._json_response(token_data._asdict() if hasattr(token_data, "_asdict") else token_data)
+                return self._json_response(token_data)
             return web.Response(status=500)
         except web.HTTPException as e:
             return self._json_response({"error": e.text or str(e)}, status=e.status)

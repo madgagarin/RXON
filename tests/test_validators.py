@@ -1,34 +1,26 @@
 # Copyright (c) 2025-2026 Dmitrii Gagarin aka madgagarin
-# This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
 import pytest
 
 from rxon.validators import is_valid_identifier, validate_identifier
 
 
-def test_is_valid_identifier():
-    assert is_valid_identifier("worker-01") is True
-    assert is_valid_identifier("gpu_worker") is True
-    assert is_valid_identifier("Task123") is True
-    assert is_valid_identifier("simple") is True
+def test_valid_identifiers():
+    assert is_valid_identifier("worker-1")
+    assert is_valid_identifier("job_123")
+    assert is_valid_identifier("Complex-ID_01")
 
-    assert is_valid_identifier("invalid space") is False
-    assert is_valid_identifier("invalid/slash") is False
-    assert is_valid_identifier("invalid.dot") is False
-    assert is_valid_identifier("") is False
-    assert is_valid_identifier(None) is False
+
+def test_invalid_identifiers():
+    # Negative cases: unforeseen injection attempts or bad formatting
+    assert not is_valid_identifier("worker 1")  # space
+    assert not is_valid_identifier("worker/1")  # slash
+    assert not is_valid_identifier("../etc/passwd")  # path traversal
+    assert not is_valid_identifier("job; DROP TABLE")  # sql-like injection
+    assert not is_valid_identifier("id$@#")  # special chars
+    assert not is_valid_identifier("")  # empty
 
 
 def test_validate_identifier_raises():
-    with pytest.raises(ValueError) as excinfo:
-        validate_identifier("bad/id")
-    assert "Invalid identifier" in str(excinfo.value)
-
-
-def test_validate_identifier_success():
-    try:
-        validate_identifier("good-id")
-    except ValueError:
-        pytest.fail("validate_identifier raised ValueError unexpectedly")
+    validate_identifier("valid-id")
+    with pytest.raises(ValueError, match="Invalid test_id"):
+        validate_identifier("invalid id!", name="test_id")

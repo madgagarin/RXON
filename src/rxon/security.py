@@ -3,15 +3,35 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import hashlib
+import hmac
 from pathlib import Path
 from ssl import CERT_OPTIONAL, CERT_REQUIRED, Purpose, SSLContext, create_default_context
 from typing import Any
+
+import orjson
+
+from .utils import to_dict
 
 __all__ = [
     "create_server_ssl_context",
     "create_client_ssl_context",
     "extract_cert_identity",
+    "sign_payload",
+    "verify_signature",
 ]
+
+
+def sign_payload(payload: Any, secret: str) -> str:
+    """Signs a payload using HMAC SHA256."""
+    message = orjson.dumps(to_dict(payload), option=orjson.OPT_SORT_KEYS)
+    return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
+
+
+def verify_signature(payload: Any, signature: str, secret: str) -> bool:
+    """Verifies the HMAC SHA256 signature of a payload."""
+    expected_signature = sign_payload(payload, secret)
+    return hmac.compare_digest(expected_signature, signature)
 
 
 def create_server_ssl_context(

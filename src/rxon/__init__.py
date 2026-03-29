@@ -3,10 +3,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from importlib.metadata import PackageNotFoundError, version
-
-from .blob import RXON_BLOB_SCHEME, calculate_config_hash, parse_uri
-from .constants import (
+from rxon.blob import RXON_BLOB_SCHEME, calculate_config_hash, parse_uri
+from rxon.constants import (
     AUTH_HEADER_CLIENT,
     AUTH_HEADER_WORKER,
     COMMAND_CANCEL_TASK,
@@ -47,7 +45,7 @@ from .constants import (
     WORKER_API_PREFIX,
     WS_ENDPOINT,
 )
-from .exceptions import (
+from rxon.exceptions import (
     IntegrityError,
     ParamValidationError,
     RxonAuthError,
@@ -56,7 +54,7 @@ from .exceptions import (
     RxonProtocolError,
     S3ConfigMismatchError,
 )
-from .models import (
+from rxon.models import (
     DeviceUsage,
     FileMetadata,
     HardwareDevice,
@@ -64,6 +62,7 @@ from .models import (
     InstalledArtifact,
     Resources,
     ResourcesUsage,
+    SecurityContext,
     SkillInfo,
     TaskError,
     TaskPayload,
@@ -74,17 +73,19 @@ from .models import (
     WorkerEventPayload,
     WorkerRegistration,
 )
-from .security import (
+from rxon.security import (
     create_client_ssl_context,
     create_server_ssl_context,
     extract_cert_identity,
 )
-from .transports.base import Listener, Transport
-from .transports.factory import create_transport
-from .transports.http import HttpTransport
-from .transports.http_server import HttpListener
-from .utils import to_dict
-from .validators import is_valid_identifier, validate_identifier
+from rxon.transports.base import Listener, Transport
+from rxon.transports.factory import create_transport
+from rxon.transports.http import HttpTransport
+from rxon.transports.http_server import HttpListener
+from rxon.utils import from_dict, loads, to_dict
+from rxon.validators import is_valid_identifier, validate_identifier
+
+__version__ = PROTOCOL_VERSION
 
 __all__ = [
     # Blob
@@ -147,6 +148,7 @@ __all__ = [
     "InstalledArtifact",
     "Resources",
     "ResourcesUsage",
+    "SecurityContext",
     "SkillInfo",
     "TaskError",
     "TaskPayload",
@@ -167,13 +169,10 @@ __all__ = [
     "HttpTransport",
     "HttpListener",
     # Utils
+    "from_dict",
     "to_dict",
+    "loads",
     # Validators
     "is_valid_identifier",
     "validate_identifier",
 ]
-
-try:
-    __version__ = version("rxon")
-except PackageNotFoundError:
-    __version__ = "unknown"

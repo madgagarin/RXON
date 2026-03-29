@@ -3,81 +3,84 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from typing import List, NamedTuple
 
 from rxon.models import (
     HardwareDevice,
-    InstalledArtifact,
+    Heartbeat,
     Resources,
+    SecurityContext,
     TaskPayload,
-    WorkerCapabilities,
+    TaskResult,
     WorkerRegistration,
 )
 from rxon.utils import to_dict
 
 
-def test_to_dict_simple():
-    class Simple(NamedTuple):
-        a: int
-        b: str
-
-    obj = Simple(1, "test")
-    assert to_dict(obj) == {"a": 1, "b": "test"}
-
-
-def test_to_dict_nested():
-    class Child(NamedTuple):
-        val: int
-
-    class Parent(NamedTuple):
-        name: str
-        child: Child
-        children: List[Child]
-
-    obj = Parent("dad", Child(1), [Child(2), Child(3)])
-    expected = {"name": "dad", "child": {"val": 1}, "children": [{"val": 2}, {"val": 3}]}
-    assert to_dict(obj) == expected
-
-
 def test_worker_registration_serialization():
-    # Construct a complex registration object matching 1.0b5 spec
     reg = WorkerRegistration(
-        worker_id="worker-01",
-        worker_type="gpu",
+        worker_id="test-1",
         supported_skills=[],
-        resources=Resources(
-            max_concurrent_tasks=2,
-            cpu_cores=8,
-            ram_gb=64.0,
-            devices=[
-                HardwareDevice(
-                    type="gpu", model="RTX 4090", id="gpu-0", properties={"vram_gb": 24, "cuda_cores": 16384}
-                )
-            ],
-        ),
-        installed_software={"python": "3.11", "cuda": "12.1"},
-        installed_artifacts=[
-            InstalledArtifact(name="sdxl", version="1.0", type="model", properties={"architecture": "diffusion"})
-        ],
-        capabilities=WorkerCapabilities(
-            hostname="node-1", ip_address="192.168.1.5", cost_per_skill={"gen_image": 0.01}
-        ),
+        resources=Resources(cpu_cores=4, ram_gb=16.0),
+        security=SecurityContext(signature="sig123", signer_id="boss"),
     )
-
-    data = to_dict(reg)
-    assert data["worker_id"] == "worker-01"
-    assert data["resources"]["devices"][0]["model"] == "RTX 4090"
-    assert data["resources"]["devices"][0]["properties"]["vram_gb"] == 24
-    assert data["installed_artifacts"][0]["properties"]["architecture"] == "diffusion"
-    assert data["capabilities"]["cost_per_skill"]["gen_image"] == 0.01
+    d = to_dict(reg)
+    assert d["worker_id"] == "test-1"
+    assert d["resources"]["cpu_cores"] == 4
+    assert d["security"]["signature"] == "sig123"
 
 
-def test_model_field_verification():
-    """Ensure TaskPayload has expected fields matching protocol."""
-    fields = TaskPayload._fields
-    assert "job_id" in fields
-    assert "task_id" in fields
-    assert "params" in fields
-    assert "tracing_context" in fields
-    assert "priority" in fields
-    assert "deadline" in fields
+def test_task_payload_defaults():
+    task = TaskPayload(job_id="j1", task_id="t1", type="echo")
+    assert task.priority == 0.0
+    assert task.params is None
+    assert task.deadline is None
+
+
+def test_hardware_device_to_dict():
+    dev = HardwareDevice(type="gpu", model="A100", properties={"vram": 40})
+    d = to_dict(dev)
+    assert d["type"] == "gpu"
+    assert d["properties"]["vram"] == 40
+
+
+def test_resources_default_concurrent():
+    res = Resources()
+    assert res.max_concurrent_tasks == 1
+
+
+def test_security_context_empty():
+    sc = SecurityContext()
+    assert sc.signature is None
+    assert sc.signer_id is None
+
+
+def test_task_result_minimal():
+    res = TaskResult(job_id="j1", task_id="t1", worker_id="w1", status="success")
+    assert res.status == "success"
+    assert res.data is None
+
+
+def test_models_empty_collections_serialization():
+    # Model with explicit empty list and dict
+    hb = Heartbeat(
+        worker_id="w1",
+        status="idle",
+        current_tasks=[],  # Empty list
+        metadata={},  # Empty dict
+    )
+    d = to_dict(hb)
+    assert d["current_tasks"] == []
+    assert d["metadata"] == {}
+
+    # Model with None (defaults)
+    hb2 = Heartbeat(worker_id="w2", status="idle")
+    d2 = to_dict(hb2)
+    assert d2["current_tasks"] is None
+    assert d2["metadata"] is None
+
+
+def test_heartbeat_minimal():
+    hb = Heartbeat(worker_id="w1", status="busy")
+    assert hb.worker_id == "w1"
+    assert hb.status == "busy"
+    assert hb.usage is None

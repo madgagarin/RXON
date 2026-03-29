@@ -5,9 +5,9 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable
-from typing import Any
+from typing import Any  # noqa: TID251
 
-from ..models import (
+from rxon.models import (
     Heartbeat,
     TaskPayload,
     TaskResult,
@@ -20,89 +20,58 @@ from ..models import (
 
 class Transport(ABC):
     """
-    Abstract Base Class for RXON Transports (Worker Side).
-    Implementations of this class handle the physical communication
-    between a Holon Shell (Worker) and its Ghost (Orchestrator).
+    Abstract base class for RXON Worker-side Transports.
     """
 
     @abstractmethod
     async def connect(self) -> None:
-        """
-        Establish connection or initialize transport.
-        Configuration (endpoint, token, etc.) should be passed to the constructor.
-        """
+        """Initialize connection/session."""
         pass
 
     @abstractmethod
     async def close(self) -> None:
-        """
-        Close transport resources.
-        """
+        """Close connection and release resources."""
         pass
 
     @abstractmethod
     async def register(self, registration: WorkerRegistration) -> Any:
-        """
-        Register the holon shell with the orchestrator.
-        Returns response data if successful.
-        Raises RxonError subclass on failure.
-        """
+        """Register the worker and return server response."""
         pass
 
     @abstractmethod
     async def poll_task(self, timeout: float = 30.0) -> TaskPayload | None:
-        """
-        Long-poll for the next available task.
-        Returns None if no task available (timeout/204).
-        Raises RxonError subclass on failure.
-        """
+        """Wait for the next task from the orchestrator."""
         pass
 
     @abstractmethod
-    async def send_result(self, result: TaskResult, max_retries: int = 3, initial_delay: float = 0.1) -> bool:
-        """
-        Send task execution result back to orchestrator.
-        Returns True if successful.
-        Raises RxonError subclass on failure (after retries).
-        """
+    async def send_result(self, result: TaskResult) -> bool:
+        """Send task execution result to orchestrator."""
         pass
 
     @abstractmethod
-    async def send_heartbeat(self, heartbeat: Heartbeat) -> dict[str, Any] | None:
-        """
-        Update holon status and availability.
-        Returns response data (e.g. commands) if successful.
-        Raises RxonError subclass on failure.
-        """
+    async def send_heartbeat(self, heartbeat: Heartbeat) -> Any | None:
+        """Send health and usage info to orchestrator."""
         pass
 
     @abstractmethod
     async def emit_event(self, event: WorkerEventPayload) -> bool:
-        """
-        Emit a generic worker event (Bottom-Up Initiative).
-        """
+        """Emit a real-time event/telemetry to orchestrator."""
         pass
 
     @abstractmethod
     def listen_for_commands(self) -> AsyncIterator[WorkerCommand]:
-        """
-        Listen for incoming commands from the orchestrator (e.g., via WebSocket).
-        """
+        """Listen for incoming commands from the orchestrator."""
         pass
 
     @abstractmethod
     async def refresh_token(self) -> TokenResponse | None:
-        """
-        Refresh the authentication token (e.g. using STS).
-        """
+        """Request a new access token using STS."""
         pass
 
 
 class Listener(ABC):
     """
-    Abstract Base Class for RXON Listeners (Orchestrator Side).
-    Implementations of this class listen for incoming worker connections
-    and route them to the Orchestrator Engine.
+    Abstract base class for RXON Orchestrator-side Listeners.
     """
 
     @abstractmethod
@@ -111,9 +80,9 @@ class Listener(ABC):
         handler: Callable[[str, Any, dict[str, Any]], Awaitable[Any]],
     ) -> None:
         """
-        Start the listener.
-        The handler callback accepts (message_type, payload, context) and returns a response.
-        Context usually contains authentication info (e.g., 'token', 'worker_id').
+        Start listening for worker connections.
+        handler: async function(action, payload, context) -> response
+        context contains authentication info (e.g., 'token', 'worker_id').
         """
         pass
 

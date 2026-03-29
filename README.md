@@ -6,71 +6,66 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![PyPI version](https://img.shields.io/pypi/v/rxon.svg)](https://pypi.org/project/rxon/)
 
-**RXON** (Reverse Axon) is a lightweight reverse-connection inter-service communication protocol designed for the **[HLN (Hierarchical Logic Network)](https://github.com/avtomatika-ai/hln)** architecture.
+**RXON** (Reverse Axon) is a lightweight, extensible reverse-connection protocol designed for **[HLN (Hierarchical Logic Network)](https://github.com/avtomatika-ai/hln)** architectures.
 
-It serves as the "nervous system" for distributed multi-agent systems, connecting autonomous nodes (Holons) into a single hierarchical network.
+It serves as the "nervous system" for distributed multi-agent systems, providing a strictly typed, Zero Trust foundation for inter-service communication.
 
-## 🧬 The Biological Metaphor
+## 🚀 Concept
 
-The name **RXON** is derived from the biological term *Axon* (the nerve fiber). In classic networks, commands typically flow "top-down" (Push model). In RXON, the connection initiative always comes from the subordinate node (Worker/Shell) to the superior node (Orchestrator/Ghost). This is a "Reverse Axon" that grows from the bottom up, creating a channel through which commands subsequently descend.
+In traditional networks, commands usually flow "top-down" (Push model). In **RXON**, the connection initiative always comes from the subordinate node (Shell) to the superior node (Orchestrator). This "Reverse Axon" architecture allows workers to operate behind NAT or Firewalls without complex network configuration, while maintaining a secure, bi-directional control channel.
 
 ## ✨ Key Features
 
--   **Pluggable Transports**: Full abstraction from the network layer. The same code can run over HTTP, WebSocket, gRPC, or Tor.
--   **Generic Event System**: Unified signaling mechanism for progress updates, custom alerts, and real-time metrics.
--   **Zero Trust Identity Chain**: Built-in support for hierarchical event bubbling with `origin_worker_id` and `bubbling_chain` to prevent spoofing in multi-layer holarchies.
--   **Universal Resource Telemetry**: Heartbeats include granular usage metrics for CPU, RAM, and any hardware devices (GPU, TPU, Sensors, Robots) via extensible `properties` and `metrics`.
--   **Task Prioritization & Deadlines**: Built-in support for task `priority` and execution `deadline` (timestamp) to enable smart local scheduling and auto-cancellation of stale tasks.
--   **Zero Dependency Core**: The protocol core has no external dependencies (standard transports use `aiohttp` and `orjson`).
--   **Strictly Typed Contracts**: All messages (tasks, results, heartbeats) define their data structures via JSON Schemas, enabling automated validation and smart dispatching.
--   **Blob Storage Native**: Built-in support for offloading heavy data via S3-compatible storage (`rxon.blob`).
+-   **Reverse Connection (PULL)**: Nodes connect to the orchestrator to pull tasks, ensuring compatibility with complex network environments.
+-   **Zero Trust Security**: Built-in support for digital signatures (`SecurityContext`) and identity chains. All messages can be cryptographically verified across multiple holarchy layers.
+-   **Agnostic & Extensible**: Core models (Resources, Skills, Tasks) are fully extensible via universal `metadata` and `properties` fields, making the protocol suitable for AI, IoT, and Robotics.
+-   **Universal Telemetry**: Heartbeats include granular metrics for CPU, RAM, and any custom devices (Sensors, GPUs, Actuators) via the extensible `HardwareDevice` model.
+-   **Generic Event System**: Unified signaling for progress updates, custom alerts, and real-time triggers with hierarchical event bubbling.
+-   **Smart Resource Matching**: Formalized logic for hardware requirements using **GE (Greater or Equal)** logic for numbers and equality for strings.
+-   **Blob Storage Native**: Direct support for offloading heavy data via S3-compatible storage (`rxon.blob`) to keep the control channel lightweight.
+-   **Zero Dependency Core**: The protocol core is written in pure Python 3.11+. Standard transports use `aiohttp` and `orjson` for peak performance.
 
 ## 🏗 Architecture
 
 The protocol is divided into two main interfaces:
 
-1.  **Transport (Worker side)**: Interface for initiating connections, retrieving tasks, emitting events, and sending results.
-2.  **Listener (Orchestrator side)**: Interface for accepting incoming connections and routing messages to the orchestration engine.
+1.  **Transport (Worker side)**: For initiating connections, retrieving tasks, emitting events, and sending results.
+2.  **Listener (Orchestrator side)**: For accepting incoming connections and routing messages to the engine.
 
-### High-Signal Telemetry (Heartbeats)
+### Smart Dispatching Logic
 
-RXON Heartbeats provide the Orchestrator with a detailed view of the Holon's health:
--   `ResourcesUsage`: Real-time CPU and RAM consumption.
--   `DeviceUsage`: Per-device load and custom `metrics` (e.g., temperature, memory, battery level) for any hardware.
--   `hot_cache`: List of artifacts/models currently loaded in memory.
--   `hot_skills`: Detailed info about skills currently ready for immediate execution.
-
-### Skill Contracts
-
-Every skill declared in RXON can now include:
--   `input_schema`: JSON Schema for parameters.
--   `output_schema`: JSON Schema for results.
--   `events_schema`: Mapping of event names to their JSON Schemas.
--   `output_statuses`: List of valid logic outcomes (e.g., `success`, `retry_later`).
+RXON formalizes the rules for matching tasks to holons:
+1.  **Identity Match**: Direct match by device ID.
+2.  **Type & Model Match**: Exact match by type, partial match by model string (case-insensitive).
+3.  **Property Match (Smart Comparison)**:
+    *   **Numbers**: Checked as **at least** (Worker value >= Requirement).
+    *   **Others**: Checked as strict equality.
 
 ## 🛡️ Error Handling
 
-RXON uses a dedicated exception hierarchy grounded in `RxonError`. It also defines standardized error codes for task results:
--   `CONTRACT_VIOLATION_ERROR`: The worker's output does not match its declared schema.
--   `DEPENDENCY_MISSING_ERROR`: A required dependency (artifact, file, service) is missing.
--   `RESOURCE_EXHAUSTED_ERROR`: Physical resources (RAM, VRAM, CPU) are exhausted.
--   `LIMIT_EXCEEDED_ERROR`: Logical limits (Quotas, Rate limits, Context windows) exceeded.
--   `TIMEOUT_ERROR`: The worker could not finish in time (or the deadline has passed).
--   `LATE_RESULT`: (Response) The orchestrator refused the result because the deadline has passed.
+RXON defines a set of standardized, cross-platform error codes to ensure consistent behavior across different implementations:
+-   `CONTRACT_VIOLATION_ERROR`: Data does not match the negotiated schema.
+-   `SECURITY_ERROR`: Authentication or signature verification failed.
+-   `RESOURCE_EXHAUSTED_ERROR`: Physical resources (RAM, VRAM) are insufficient.
+-   `DEPENDENCY_ERROR`: A required service or artifact is unavailable.
 
-## 🧪 Testing
-
-The library includes a `MockTransport` to simplify testing Workers in isolation without running a real Orchestrator.
+## 🧪 Quick Start
 
 ```python
-from rxon.testing import MockTransport
+from rxon.models import Resources, HardwareDevice
 
-# Use standard factory with mock:// scheme
-transport = create_transport("mock://", "test-worker", "token")
-await transport.connect()
+# Define worker resources
+my_res = Resources(
+    cpu_cores=8,
+    devices=[HardwareDevice(type="gpu", model="RTX 4090", properties={"memory_gb": 24})]
+)
 
-# Inject tasks directly
-transport.push_task(my_task_payload)
+# Define task requirements
+req = Resources(cpu_cores=4, devices=[HardwareDevice(type="gpu", properties={"memory_gb": 16})])
+
+# Standardized Matching (HLN Protocol)
+if my_res.matches(req):
+    print("This holon is ready for the task!")
 ```
 
 ## 📜 License
