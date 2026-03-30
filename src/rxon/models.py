@@ -196,6 +196,7 @@ class WorkerRegistration(NamedTuple):
     skills_hash: str | None = None
     security: SecurityContext | None = None
     metadata: dict[str, Any] | None = None
+    timestamp: float | None = None
 
 
 class TokenResponse(NamedTuple):
@@ -251,13 +252,14 @@ class TaskError(NamedTuple):
 class TaskResult(NamedTuple):
     job_id: str
     task_id: str
-    worker_id: str
-    status: str
+    worker_id: str | None = None
+    status: str = "success"
     data: dict[str, Any] | None = None
     error: TaskError | None = None
     data_metadata: dict[str, FileMetadata] | None = None
     security: SecurityContext | None = None
     metadata: dict[str, Any] | None = None
+    timestamp: float | None = None
 
 
 class Heartbeat(NamedTuple):
@@ -272,3 +274,4 @@ class Heartbeat(NamedTuple):
     skills_hash: str | None = None
     security: SecurityContext | None = None
     metadata: dict[str, Any] | None = None
+    timestamp: float | None = None

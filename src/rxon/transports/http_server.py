@@ -100,6 +100,10 @@ class HttpListener(Listener):
             return self._json_response({"error": "No handler configured"}, status=500)
         except web.HTTPException as e:
             return self._json_response({"error": e.text or str(e)}, status=e.status)
+        except PermissionError as e:
+            return self._json_response({"error": str(e)}, status=403)
+        except ValueError as e:
+            return self._json_response({"error": str(e)}, status=400)
         except Exception as e:
             return self._json_response({"error": str(e)}, status=500)
 
@@ -120,6 +124,10 @@ class HttpListener(Listener):
             return web.Response(status=500)
         except web.HTTPException as e:
             return self._json_response({"error": e.text or str(e)}, status=e.status)
+        except PermissionError as e:
+            return self._json_response({"error": str(e)}, status=403)
+        except ValueError as e:
+            return self._json_response({"error": str(e)}, status=400)
         except Exception as e:
             return self._json_response({"error": str(e)}, status=500)
 
@@ -135,6 +143,10 @@ class HttpListener(Listener):
             return self._json_response({"error": "No handler configured"}, status=500)
         except web.HTTPException as e:
             return self._json_response({"error": e.text or str(e)}, status=e.status)
+        except PermissionError as e:
+            return self._json_response({"error": str(e)}, status=403)
+        except ValueError as e:
+            return self._json_response({"error": str(e)}, status=400)
         except Exception as e:
             return self._json_response({"error": str(e)}, status=500)
 
@@ -155,6 +167,10 @@ class HttpListener(Listener):
             return web.Response(status=500)
         except web.HTTPException as e:
             return self._json_response({"error": e.text or str(e)}, status=e.status)
+        except PermissionError as e:
+            return self._json_response({"error": str(e)}, status=403)
+        except ValueError as e:
+            return self._json_response({"error": str(e)}, status=400)
         except Exception as e:
             return self._json_response({"error": str(e)}, status=500)
 
@@ -170,6 +186,10 @@ class HttpListener(Listener):
             return self._json_response({"error": "No handler configured"}, status=500)
         except web.HTTPException as e:
             return self._json_response({"error": e.text or str(e)}, status=e.status)
+        except PermissionError as e:
+            return self._json_response({"error": str(e)}, status=403)
+        except ValueError as e:
+            return self._json_response({"error": str(e)}, status=400)
         except Exception as e:
             return self._json_response({"error": str(e)}, status=500)
 
@@ -182,6 +202,10 @@ class HttpListener(Listener):
             return web.Response(status=500)
         except web.HTTPException as e:
             return self._json_response({"error": e.text or str(e)}, status=e.status)
+        except PermissionError as e:
+            return self._json_response({"error": str(e)}, status=403)
+        except ValueError as e:
+            return self._json_response({"error": str(e)}, status=400)
         except Exception as e:
             return self._json_response({"error": str(e)}, status=500)
 
