@@ -6,6 +6,8 @@
 
 import time
 
+import pytest
+
 from rxon.models import (
     Heartbeat,
     SecurityContext,
@@ -17,7 +19,7 @@ from rxon.security import sign_payload, verify_signature
 from rxon.utils import from_dict, to_dict
 
 
-def test_sign_and_verify_payload_basic():
+def test_sign_and_verify_payload_basic() -> None:
     """Test basic HMAC SHA256 signing and verification."""
     payload = {"worker_id": "test-worker", "status": "active"}
     secret = "super-secret-key"
@@ -26,18 +28,48 @@ def test_sign_and_verify_payload_basic():
     assert isinstance(signature, str)
     assert len(signature) > 10
 
-    # Verify should succeed
     assert verify_signature(payload, signature, secret) is True
 
-    # Tampering should fail
     tampered_payload = {"worker_id": "test-worker", "status": "hacked"}
     assert verify_signature(tampered_payload, signature, secret) is False
 
-    # Wrong secret should fail
+    assert verify_signature(payload, signature[:-1] + "0", secret) is False
+
     assert verify_signature(payload, signature, "wrong-secret") is False
 
 
-def test_worker_registration_zero_trust_fields():
+def test_sign_payload_negative() -> None:
+    """Test that signing with empty secret fails."""
+    with pytest.raises(ValueError, match="Secret key for signing cannot be empty"):
+        sign_payload({"foo": "bar"}, "")
+    with pytest.raises(ValueError):
+        sign_payload({"foo": "bar"}, None)  # type: ignore
+
+
+def test_verify_signature_edge_cases() -> None:
+    """Test verification with empty or invalid inputs."""
+    payload = {"foo": "bar"}
+    valid_secret = "secret"
+    valid_sig = sign_payload(payload, valid_secret)
+
+    assert verify_signature(payload, "", valid_secret) is False
+    assert verify_signature(payload, valid_sig, "") is False
+    assert verify_signature(payload, None, valid_secret) is False  # type: ignore[arg-type]
+    assert verify_signature(payload, valid_sig, None) is False  # type: ignore[arg-type]
+
+
+def test_sign_payload_stable_sorting() -> None:
+    """Test that sign_payload handles key sorting (important for identical signatures)."""
+    payload1 = {"a": 1, "b": 2, "c": 3}
+    payload2 = {"c": 3, "a": 1, "b": 2}
+    secret = "key"
+
+    sig1 = sign_payload(payload1, secret)
+    sig2 = sign_payload(payload2, secret)
+    assert sig1 == sig2
+
+
+def test_worker_registration_zero_trust_fields() -> None:
     """Test WorkerRegistration handles timestamp and security fields."""
     ts = time.time()
     security = SecurityContext(signature="test-sig", signer_id="worker-1")
@@ -48,14 +80,14 @@ def test_worker_registration_zero_trust_fields():
     assert reg_dict["security"]["signature"] == "test-sig"
     assert reg_dict["security"]["signer_id"] == "worker-1"
 
-    # Restore from dict
     restored = from_dict(WorkerRegistration, reg_dict)
     assert restored.timestamp == ts
+    assert restored.security is not None
     assert restored.security.signature == "test-sig"
     assert restored.security.signer_id == "worker-1"
 
 
-def test_task_result_zero_trust_fields():
+def test_task_result_zero_trust_fields() -> None:
     """Test TaskResult handles timestamp and security fields."""
     ts = time.time()
     security = SecurityContext(signature="test-sig", signer_id="worker-1")
@@ -67,10 +99,11 @@ def test_task_result_zero_trust_fields():
 
     restored = from_dict(TaskResult, res_dict)
     assert restored.timestamp == ts
+    assert restored.security is not None
     assert restored.security.signature == "test-sig"
 
 
-def test_heartbeat_zero_trust_fields():
+def test_heartbeat_zero_trust_fields() -> None:
     """Test Heartbeat handles timestamp and security fields."""
     ts = time.time()
     security = SecurityContext(signature="test-sig", signer_id="worker-1")
@@ -82,10 +115,11 @@ def test_heartbeat_zero_trust_fields():
 
     restored = from_dict(Heartbeat, hb_dict)
     assert restored.timestamp == ts
+    assert restored.security is not None
     assert restored.security.signature == "test-sig"
 
 
-def test_worker_event_payload_zero_trust_fields():
+def test_worker_event_payload_zero_trust_fields() -> None:
     """Test WorkerEventPayload handles timestamp and security fields."""
     ts = time.time()
     security = SecurityContext(signature="test-sig", signer_id="worker-1")
@@ -107,5 +141,6 @@ def test_worker_event_payload_zero_trust_fields():
 
     restored = from_dict(WorkerEventPayload, event_dict)
     assert restored.timestamp == ts
+    assert restored.security is not None
     assert restored.security.signature == "test-sig"
     assert restored.bubbling_chain == ["proxy-1"]

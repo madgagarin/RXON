@@ -21,8 +21,9 @@ In traditional networks, commands usually flow "top-down" (Push model). In **RXO
 -   **Agnostic & Extensible**: Core models (Resources, Skills, Tasks) are fully extensible via universal `metadata` and `properties` fields, making the protocol suitable for AI, IoT, and Robotics.
 -   **Universal Telemetry**: Heartbeats include granular metrics for CPU, RAM, and any custom devices (Sensors, GPUs, Actuators) via the extensible `HardwareDevice` model.
 -   **Generic Event System**: Unified signaling for progress updates, custom alerts, and real-time triggers with hierarchical event bubbling.
--   **Smart Resource Matching**: Formalized logic for hardware requirements using **GE (Greater or Equal)** logic for numbers and equality for strings.
--   **Blob Storage Native**: Direct support for offloading heavy data via S3-compatible storage (`rxon.blob`) to keep the control channel lightweight.
+-   **Smart Resource Matching**: Formalized logic for hardware requirements using **GE (Greater or Equal)** logic for numbers and partial string matching for models.
+-   **Pluggable Blob Storage**: Standardized `BlobProvider` interface for offloading heavy data via S3, GCS, or Local storage to keep the control channel lightweight.
+-   **Unified Factory**: Easy transport initialization via `create_transport` supporting `http://`, `https://`, `ws://`, and `wss://` schemes.
 -   **Zero Dependency Core**: The protocol core is written in pure Python 3.11+. Standard transports use `aiohttp` and `orjson` for peak performance.
 
 ## 🏗 Architecture
@@ -52,18 +53,20 @@ RXON defines a set of standardized, cross-platform error codes to ensure consist
 ## 🧪 Quick Start
 
 ```python
-from rxon.models import Resources, HardwareDevice
+from rxon import create_transport
+from rxon.models import Resources, HardwareDevice, WorkerRegistration
 
-# Define worker resources
+# 1. Create transport (supports http, https, ws, wss)
+transport = create_transport("ws://api.hln.local", "worker-01", "secret-token")
+
+# 2. Define worker resources
 my_res = Resources(
     cpu_cores=8,
     devices=[HardwareDevice(type="gpu", model="RTX 4090", properties={"memory_gb": 24})]
 )
 
-# Define task requirements
+# 3. Smart Matching Logic
 req = Resources(cpu_cores=4, devices=[HardwareDevice(type="gpu", properties={"memory_gb": 16})])
-
-# Standardized Matching (HLN Protocol)
 if my_res.matches(req):
     print("This holon is ready for the task!")
 ```

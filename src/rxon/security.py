@@ -7,7 +7,7 @@ import hashlib
 import hmac
 from pathlib import Path
 from ssl import CERT_OPTIONAL, CERT_REQUIRED, Purpose, SSLContext, create_default_context
-from typing import Any
+from typing import Any, cast
 
 import orjson
 
@@ -24,12 +24,16 @@ __all__ = [
 
 def sign_payload(payload: Any, secret: str) -> str:
     """Signs a payload using HMAC SHA256."""
+    if not secret:
+        raise ValueError("Secret key for signing cannot be empty.")
     message = orjson.dumps(to_dict(payload), option=orjson.OPT_SORT_KEYS)
     return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
 
 
 def verify_signature(payload: Any, signature: str, secret: str) -> bool:
-    """Verifies the HMAC SHA256 signature of a payload."""
+    """Verifies the HMAC SHA256 signature of a payload using constant-time comparison."""
+    if not signature or not secret:
+        return False
     expected_signature = sign_payload(payload, secret)
     return hmac.compare_digest(expected_signature, signature)
 
@@ -101,5 +105,5 @@ def extract_cert_identity(request: Any) -> str | None:
     for subject_parts in cert.get("subject", []):
         for rdn in subject_parts:
             if rdn[0] == "commonName":
-                return rdn[1]
+                return cast(str, rdn[1])
     return None

@@ -92,8 +92,11 @@ def _restore_field(field_type: Any, val: Any) -> Any:
 
     if origin is Union or isinstance(field_type, UnionType):
         real_types = [a for a in args if a is not type(None)]
-        if real_types:
-            return _restore_field(real_types[0], val)
+        for t in real_types:
+            try:
+                return _restore_field(t, val)
+            except (ValueError, TypeError):
+                continue
         return val
 
     if origin in (list, tuple) and args and isinstance(val, (list, tuple)):
@@ -102,8 +105,9 @@ def _restore_field(field_type: Any, val: Any) -> Any:
         return tuple(items) if origin is tuple else items
 
     if origin is dict and len(args) > 1 and isinstance(val, dict):
+        key_type = args[0]
         val_type = args[1]
-        return {k: _restore_field(val_type, v) for k, v in val.items()}
+        return {_restore_field(key_type, k): _restore_field(val_type, v) for k, v in val.items()}
 
     if (hasattr(field_type, "_fields") or is_dataclass(field_type)) and isinstance(val, dict):
         return from_dict(field_type, val)

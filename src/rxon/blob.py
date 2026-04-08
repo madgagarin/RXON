@@ -3,16 +3,41 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+from abc import ABC, abstractmethod
 from hashlib import sha256
+from typing import Any
 from urllib.parse import urlparse
 
 __all__ = [
     "RXON_BLOB_SCHEME",
     "calculate_config_hash",
     "parse_uri",
+    "BlobProvider",
 ]
 
 RXON_BLOB_SCHEME = "s3"
+
+
+class BlobProvider(ABC):
+    """
+    Abstract interface for Blob Storage providers (S3, GCS, Local).
+    RXON uses URIs like s3://bucket/key to reference heavy data.
+    """
+
+    @abstractmethod
+    async def upload(self, local_path: str, uri: str) -> str:
+        """Uploads a local file to the storage and returns the URI/ETag."""
+        pass
+
+    @abstractmethod
+    async def download(self, uri: str, local_path: str) -> bool:
+        """Downloads a file from storage to local path."""
+        pass
+
+    @abstractmethod
+    async def get_metadata(self, uri: str) -> dict[str, Any] | None:
+        """Returns metadata (size, etag, content-type) for a URI."""
+        pass
 
 
 def calculate_config_hash(endpoint: str | None, access_key: str | None, bucket: str | None) -> str | None:

@@ -6,35 +6,33 @@ from rxon.testing import MockTransport
 
 
 @pytest.mark.asyncio
-async def test_mock_transport_full_flow():
+async def test_mock_transport_full_flow() -> None:
     transport = MockTransport(worker_id="test-worker")
     await transport.connect()
     assert transport.connected
 
-    # 1. Registration
     reg = WorkerRegistration(worker_id="test-worker", resources=Resources(cpu_cores=2))
     resp = await transport.register(reg)
     assert resp["status"] == "registered"
     assert len(transport.registered) == 1
 
-    # 2. Heartbeat
     hb = Heartbeat(worker_id="test-worker", status="idle")
     await transport.send_heartbeat(hb)
     assert len(transport.heartbeats) == 1
 
-    # 3. Tasks (pushing a dict, expecting a model)
+    # pushing a dict, expecting a model
     transport.push_task({"job_id": "j1", "task_id": "t1", "type": "compute", "params": {"n": 10}})
     task = await transport.poll_task(timeout=0.1)
     assert isinstance(task, TaskPayload)
     assert task.job_id == "j1"
+    assert task.params is not None
     assert task.params["n"] == 10
 
-    # 4. Results
     res = TaskResult(job_id="j1", task_id="t1", worker_id="test-worker", status="success")
     await transport.send_result(res)
     assert len(transport.results) == 1
 
-    # 5. Commands (pushing a dict, expecting a model)
+    # pushing a dict, expecting a model
     transport.push_command({"command": "stop", "task_id": "t1"})
 
     # We need to manually iterate since it's an async generator

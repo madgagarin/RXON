@@ -151,7 +151,7 @@ class HttpTransport(Transport):
             async with self._session.post(url, headers=self._headers) as resp:
                 if resp.status == 200:
                     data = await resp.json(loads=loads)
-                    res = from_dict(TokenResponse, data)
+                    res = cast(TokenResponse, from_dict(TokenResponse, data))
                     self.token = res.access_token
                     self._headers[AUTH_HEADER_WORKER] = self.token
                     logger.info(f"Token refreshed. Expires in {res.expires_in}s")
@@ -166,7 +166,7 @@ class HttpTransport(Transport):
     async def poll_task(self, timeout: float = 30.0) -> TaskPayload | None:
         endpoint = ENDPOINT_TASK_NEXT.format(worker_id=self.worker_id)
         data = await self._request("GET", endpoint, timeout=ClientTimeout(total=timeout + 5))
-        return from_dict(TaskPayload, data) if data else None
+        return cast(TaskPayload | None, from_dict(TaskPayload, data) if data else None)
 
     async def send_result(self, result: TaskResult, max_retries: int | None = None, delay: float | None = None) -> bool:
         retries = max_retries if max_retries is not None else self.result_retries
@@ -195,7 +195,7 @@ class HttpTransport(Transport):
     async def send_heartbeat(self, heartbeat: Heartbeat) -> dict[str, Any] | None:
         endpoint = ENDPOINT_WORKER_HEARTBEAT.format(worker_id=self.worker_id)
         try:
-            return await self._request("PATCH", endpoint, json=heartbeat)
+            return cast(dict[str, Any] | None, await self._request("PATCH", endpoint, json=heartbeat))
         except RxonError as e:
             logger.warning(f"Heartbeat failed: {e}")
             raise e

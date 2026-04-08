@@ -6,11 +6,11 @@
 import asyncio
 import socket
 from logging import WARNING
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
-from aiohttp import WSMsgType, web
+from aiohttp import ClientSession, WSMsgType, web
 
 from rxon import HttpListener, create_transport
 from rxon.constants import (
@@ -32,25 +32,26 @@ from rxon.models import (
     WorkerEventPayload,
     WorkerRegistration,
 )
+from rxon.transports.http import HttpTransport
 from rxon.utils import to_dict
 
 
 @pytest.fixture
-def unused_tcp_port_factory():
+def unused_tcp_port_factory() -> Any:
     def factory() -> int:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(("127.0.0.1", 0))
-            return s.getsockname()[1]
+            return cast(int, s.getsockname()[1])
 
     return factory
 
 
 @pytest.fixture
-async def server(unused_tcp_port_factory):
+async def server(unused_tcp_port_factory: Any) -> Any:
     port = unused_tcp_port_factory()
     app = web.Application()
     listener = HttpListener(app)
-    state = {"registered": [], "heartbeats": [], "results": [], "tasks_queue": []}
+    state: dict[str, Any] = {"registered": [], "heartbeats": [], "results": [], "tasks_queue": []}
 
     async def mock_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
         if msg_type == "register":
@@ -155,7 +156,7 @@ async def test_auth_refresh_success(server: tuple[str, dict[str, Any], HttpListe
         hb = Heartbeat("worker-auth", "idle", ResourcesUsage(0.0, 0.5, []), [], [], [], None)
         success = await transport.send_heartbeat(hb)
         assert success is not None
-        assert transport.token == "valid-token"
+        assert cast(HttpTransport, transport).token == "valid-token"
     finally:
         await transport.close()
 
@@ -293,6 +294,25 @@ async def test_auth_refresh_failure(server: tuple[str, dict[str, Any], HttpListe
 
 
 @pytest.mark.asyncio
+async def test_network_timeout(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    base_url, _, listener = server
+
+    async def slow_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        await asyncio.sleep(2.0)
+        return {"status": "ok"}
+
+    listener.handler = slow_handler
+    transport = create_transport(base_url, "worker-timeout", "token")
+    await transport.connect()
+    try:
+        # poll_task uses its own timeout, but we test a quick heartbeat
+        with pytest.raises(Exception):  # Should be RxonNetworkError/TimeoutError
+            await asyncio.wait_for(transport.send_heartbeat(Heartbeat("worker-timeout", "idle")), timeout=0.1)
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
 async def test_poll_returns_empty_dict(server: tuple[str, dict[str, Any], HttpListener]) -> None:
     base_url, _, listener = server
 
@@ -328,5 +348,83 @@ async def test_websocket_error_handling(server: tuple[str, dict[str, Any], HttpL
     try:
         async for _ in transport.listen_for_commands():
             pass
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_websocket_auth_rejection(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    base_url, _, listener = server
+
+    async def rejection_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        if msg_type == "websocket_auth":
+            raise PermissionError("Access denied before handshake")
+        return {"status": "ok"}
+
+    listener.handler = rejection_handler
+
+    async with ClientSession() as session:
+        from rxon.constants import WS_ENDPOINT
+
+        ws_url = f"{base_url.replace('http', 'ws', 1)}{WS_ENDPOINT}/worker-denied"
+        try:
+            async with session.ws_connect(ws_url) as _:
+                pytest.fail("Handshake should not have happened")
+        except Exception as e:
+            assert "403" in str(e)
+
+
+@pytest.mark.asyncio
+async def test_server_error_500(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    base_url, _, listener = server
+
+    async def server_fail_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        return web.Response(status=500, text="Internal Server Error (Simulated)")
+
+    listener.handler = server_fail_handler
+    transport = create_transport(base_url, "worker-error", "token")
+    await transport.connect()
+
+    try:
+        with pytest.raises(RxonProtocolError, match="HTTP 500"):
+            await transport.register(WorkerRegistration("worker-error"))
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_server_error_400_invalid_payload(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    base_url, _, listener = server
+
+    async def bad_request_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        return web.Response(status=400, text="Validation error: name is too short")
+
+    listener.handler = bad_request_handler
+    transport = create_transport(base_url, "worker-bad", "token")
+    await transport.connect()
+
+    try:
+        with pytest.raises(RxonProtocolError, match="HTTP 400"):
+            await transport.register(WorkerRegistration("worker-bad"))
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_send_result_mismatch_ignored(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    base_url, _, listener = server
+
+    async def result_mismatch_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        if msg_type == "result":
+            return {"status": "ignored", "reason": "worker_mismatch"}
+        return {"status": "ok"}
+
+    listener.handler = result_mismatch_handler
+    transport = create_transport(base_url, "worker-mismatch", "token")
+    await transport.connect()
+    try:
+        res = TaskResult("job-wrong", "task-wrong", "worker-mismatch", "success")
+        success = await transport.send_result(res)
+        assert success is False
     finally:
         await transport.close()

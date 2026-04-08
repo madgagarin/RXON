@@ -21,8 +21,9 @@ En las redes tradicionales, los comandos suelen fluir "de arriba hacia abajo" (m
 -   **Agnóstico y extensible**: Los modelos principales (recursos, habilidades, tareas) son totalmente extensibles mediante campos universales `metadata` y `properties`, lo que hace que el protocolo sea adecuado para IA, IoT y robótica.
 -   **Telemetría Universal**: Los heartbeats incluyen métricas detalladas de CPU, RAM y cualquier dispositivo personalizado (sensores, GPUs, actuadores) a través del modelo extensible `HardwareDevice`.
 -   **Sistema de Eventos Genérico**: Mecanismo unificado de señalización para actualizaciones de progreso, alertas personalizadas y disparadores en tiempo real con burbujeo jerárquico de eventos.
--   **Smart matching de recursos**: Lógica formalizada para requisitos de hardware utilizando la lógica **GE (Greater or Equal)** para números e igualdad para cadenas.
--   **Soporte nativo para Blob**: Soporte directo para el manejo de datos pesados a través de almacenamiento compatible con S3 (`rxon.blob`) para mantener ligero el canal de control.
+-   **Smart matching de recursos**: Lógica formalizada para requisitos de hardware utilizando la lógica **GE (Greater or Equal)** para números y coincidencia parcial para modelos.
+-   **Almacenamiento Blob Enchufable**: Interfaz `BlobProvider` estandarizada para la descarga de datos pesados a través de S3, GCS o almacenamiento local.
+-   **Fábrica Unificada**: Inicialización fácil del transporte mediante `create_transport` con soporte para esquemas `http://`, `https://`, `ws://` y `wss://`.
 -   **Núcleo sin dependencias**: El núcleo del protocolo está escrito en Python 3.11+ puro. Los transportes estándar utilizan `aiohttp` y `orjson` para un rendimiento máximo.
 
 ## 🏗 Arquitectura
@@ -41,7 +42,7 @@ RXON formaliza las reglas para emparejar tareas con holones:
     *   **Números**: Se verifica como **al menos** (Valor del Worker >= Requisito).
     *   **Otros**: Se verifica como igualdad estricta.
 
-## 🛡️ Manejo de Erроrеs
+## 🛡️ Manejo de Errores
 
 RXON define un conjunto de códigos de error estandarizados para garantizar un comportamiento consistente en todas las implementaciones:
 -   `CONTRACT_VIOLATION_ERROR`: Los datos no coinciden con el esquema negociado.
@@ -52,18 +53,20 @@ RXON define un conjunto de códigos de error estandarizados para garantizar un c
 ## 🧪 Inicio Rápido
 
 ```python
+from rxon import create_transport
 from rxon.models import Resources, HardwareDevice
 
-# Definir recursos del worker
+# 1. Crear transporte (soporta http, https, ws, wss)
+transport = create_transport("ws://api.hln.local", "worker-01", "secret-token")
+
+# 2. Definir recursos del worker
 my_res = Resources(
     cpu_cores=8,
     devices=[HardwareDevice(type="gpu", model="RTX 4090", properties={"memory_gb": 24})]
 )
 
-# Definir requisitos de la tarea
+# 3. Lógica de Smart Matching
 req = Resources(cpu_cores=4, devices=[HardwareDevice(type="gpu", properties={"memory_gb": 16})])
-
-# Matching Estandarizado (Protocolo HLN)
 if my_res.matches(req):
     print("¡Este holón está listo para la tarea!")
 ```

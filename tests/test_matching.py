@@ -2,50 +2,44 @@
 from rxon.models import HardwareDevice, InstalledArtifact, Resources
 
 
-def test_hardware_device_matches_simple():
+def test_hardware_device_matches_simple() -> None:
     dev = HardwareDevice(type="gpu", model="NVIDIA RTX 4090", id="0")
 
-    # Positive
     assert dev.matches(HardwareDevice(type="gpu"))
     assert dev.matches(HardwareDevice(type="gpu", model="RTX 4090"))
-    assert dev.matches(HardwareDevice(type="gpu", model="rtx 4090"))  # Case-insensitive
+    assert dev.matches(HardwareDevice(type="gpu", model="rtx 4090"))
     assert dev.matches(HardwareDevice(type="gpu", id="0"))
 
-    # Negative
     assert not dev.matches(HardwareDevice(type="cpu"))
     assert not dev.matches(HardwareDevice(type="gpu", model="RTX 3080"))
     assert not dev.matches(HardwareDevice(type="gpu", id="1"))
 
 
-def test_hardware_device_matches_properties():
+def test_hardware_device_matches_properties() -> None:
     dev = HardwareDevice(type="gpu", properties={"memory_gb": 24, "cuda_version": "12.1", "compute_cap": 8.9})
 
-    # Positive (GE logic for numbers)
     assert dev.matches(HardwareDevice(type="gpu", properties={"memory_gb": 16}))
     assert dev.matches(HardwareDevice(type="gpu", properties={"memory_gb": 24}))
     assert dev.matches(HardwareDevice(type="gpu", properties={"cuda_version": "12.1"}))
     assert dev.matches(HardwareDevice(type="gpu", properties={"compute_cap": 8.0}))
 
-    # Negative
     assert not dev.matches(HardwareDevice(type="gpu", properties={"memory_gb": 32}))
     assert not dev.matches(HardwareDevice(type="gpu", properties={"cuda_version": "11.8"}))
     assert not dev.matches(HardwareDevice(type="gpu", properties={"unknown_prop": 1}))
 
 
-def test_resources_matches_compute():
+def test_resources_matches_compute() -> None:
     res = Resources(cpu_cores=16, ram_gb=64.5)
 
-    # Positive
     assert res.matches(Resources(cpu_cores=8))
     assert res.matches(Resources(ram_gb=32.0))
     assert res.matches(Resources(cpu_cores=16, ram_gb=64.5))
 
-    # Negative
     assert not res.matches(Resources(cpu_cores=32))
     assert not res.matches(Resources(ram_gb=128))
 
 
-def test_resources_matches_multi_device():
+def test_resources_matches_multi_device() -> None:
     res = Resources(
         devices=[
             HardwareDevice(type="gpu", model="RTX 4090", properties={"vram": 24}),
@@ -54,7 +48,6 @@ def test_resources_matches_multi_device():
         ]
     )
 
-    # Positive: Task needs two specific GPUs
     req = Resources(
         devices=[
             HardwareDevice(type="gpu", properties={"vram": 20}),
@@ -63,31 +56,27 @@ def test_resources_matches_multi_device():
     )
     assert res.matches(req)
 
-    # Positive: Task needs a GPU and a sensor
     req2 = Resources(devices=[HardwareDevice(type="gpu", model="RTX 4090"), HardwareDevice(type="sensor")])
     assert res.matches(req2)
 
-    # Negative: Task needs 3 GPUs, we have only 2
     req3 = Resources(devices=[HardwareDevice(type="gpu"), HardwareDevice(type="gpu"), HardwareDevice(type="gpu")])
     assert not res.matches(req3)
 
-    # Negative: One requirement cannot be met (VRAM too high)
     req4 = Resources(devices=[HardwareDevice(type="gpu", properties={"vram": 30})])
     assert not res.matches(req4)
 
 
-def test_resources_matches_properties():
+def test_resources_matches_properties() -> None:
     res = Resources(properties={"location": "us-east", "tier": 1})
 
     assert res.matches(Resources(properties={"location": "us-east"}))
     assert res.matches(Resources(properties={"tier": 1}))
 
-    # Negative
     assert not res.matches(Resources(properties={"tier": 2}))
     assert not res.matches(Resources(properties={"location": "eu-west"}))
 
 
-def test_hardware_device_incompatible_types():
+def test_hardware_device_incompatible_types() -> None:
     # Requirement wants numeric GE comparison, but worker has string
     dev = HardwareDevice(type="gpu", properties={"vram": "16GB"})
     req = HardwareDevice(type="gpu", properties={"vram": 8})
@@ -96,41 +85,88 @@ def test_hardware_device_incompatible_types():
     assert not dev.matches(req)
 
 
-def test_matching_with_none_collections():
-    # Resources with None devices matching requirement with None devices
+def test_matching_with_none_collections() -> None:
     res = Resources(devices=None)
     req = Resources(devices=None)
     assert res.matches(req)
 
-    # Resources with None devices matching requirement with empty list
     req2 = Resources(devices=[])
     assert res.matches(req2)
 
 
-def test_matching_none_vs_empty_collections():
-    # 1. Devices: None matches empty list and vice versa
+def test_matching_extreme_types() -> None:
+    # Requirement wants a number, but worker has a list or dict
+    dev = HardwareDevice(type="gpu", properties={"vram": [16, 32]})
+    req = HardwareDevice(type="gpu", properties={"vram": 8})
+    assert not dev.matches(req)
+
+    dev2 = HardwareDevice(type="gpu", properties={"vram": {"amount": 16}})
+    assert not dev2.matches(req)
+
+
+def test_matching_missing_properties_in_worker() -> None:
+    # Requirement asks for property that worker doesn't have at all
+    dev = HardwareDevice(type="gpu", properties={"vram": 16})
+    req = HardwareDevice(type="gpu", properties={"vram": 8, "cuda_cores": 1000})
+    assert not dev.matches(req)
+
+
+def test_matching_none_vs_empty_collections() -> None:
     assert Resources(devices=None).matches(Resources(devices=[]))
     assert Resources(devices=[]).matches(Resources(devices=None))
     assert Resources(devices=[]).matches(Resources(devices=[]))
 
-    # 2. Properties: None matches empty dict
     assert Resources(properties=None).matches(Resources(properties={}))
     assert Resources(properties={}).matches(Resources(properties=None))
 
-    # 3. But requirement with actual data should NOT match empty worker
+    # Requirement with actual data should NOT match empty worker
     assert not Resources(devices=[]).matches(Resources(devices=[HardwareDevice(type="gpu")]))
     assert not Resources(properties={}).matches(Resources(properties={"a": 1}))
 
 
-def test_artifact_matches():
+def test_artifact_matches() -> None:
     art = InstalledArtifact(name="cuda", version="12.1", properties={"driver": 525})
 
-    # Positive
     assert art.matches(InstalledArtifact(name="cuda"))
     assert art.matches(InstalledArtifact(name="cuda", version="12.1"))
     assert art.matches(InstalledArtifact(name="cuda", properties={"driver": 500}))
 
-    # Negative
     assert not art.matches(InstalledArtifact(name="cuda", version="11.8"))
     assert not art.matches(InstalledArtifact(name="cudnn"))
     assert not art.matches(InstalledArtifact(name="cuda", properties={"driver": 530}))
+
+
+def test_hardware_device_partial_model_match() -> None:
+    dev = HardwareDevice(type="gpu", model="NVIDIA GeForce RTX 4090 Ti")
+
+    assert dev.matches(HardwareDevice(type="gpu", model="RTX 4090"))
+    assert dev.matches(HardwareDevice(type="gpu", model="geforce"))
+    assert dev.matches(HardwareDevice(type="gpu", model="nvidia"))
+
+    assert not dev.matches(HardwareDevice(type="gpu", model="RTX 3080"))
+
+
+def test_resources_complex_multi_device_matching() -> None:
+    res = Resources(
+        devices=[
+            HardwareDevice(type="gpu", id="G1", properties={"vram": 24}),
+            HardwareDevice(type="gpu", id="G2", properties={"vram": 12}),
+            HardwareDevice(type="gpu", id="G3", properties={"vram": 8}),
+        ]
+    )
+
+    req_ok = Resources(
+        devices=[
+            HardwareDevice(type="gpu", properties={"vram": 20}),
+            HardwareDevice(type="gpu", properties={"vram": 10}),
+        ]
+    )
+    assert res.matches(req_ok)
+
+    req_fail = Resources(
+        devices=[
+            HardwareDevice(type="gpu", properties={"vram": 20}),
+            HardwareDevice(type="gpu", properties={"vram": 20}),
+        ]
+    )
+    assert not res.matches(req_fail)

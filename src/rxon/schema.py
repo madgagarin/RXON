@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import MISSING, fields, is_dataclass
+from enum import Enum
 from types import UnionType
 from typing import Any, Union, get_args, get_origin, get_type_hints
 from uuid import UUID
@@ -74,6 +75,10 @@ def _is_optional(tp: Any) -> bool:
 
 def _python_type_to_json_schema(tp: Any) -> dict[str, Any]:
     """Recursively converts Python types to JSON Schema fragments."""
+    # Special handling for Any (matches everything)
+    if tp is Any:
+        return {}
+
     mapping = {
         str: "string",
         int: "integer",
@@ -86,6 +91,10 @@ def _python_type_to_json_schema(tp: Any) -> dict[str, Any]:
 
     if tp in mapping:
         return {"type": mapping[tp]}
+
+    # Handle Enums
+    if isinstance(tp, type) and issubclass(tp, Enum):
+        return {"type": "string", "enum": [e.value for e in tp]}
 
     if isinstance(tp, UnionType):
         return {"anyOf": [_python_type_to_json_schema(a) for a in get_args(tp)]}
@@ -112,7 +121,7 @@ def _python_type_to_json_schema(tp: Any) -> dict[str, Any]:
 
 def validate_data(data: Any, schema: dict[str, Any] | None) -> tuple[bool, str | None]:
     """Basic JSON Schema validation (types, required, properties, array items, anyOf, null)."""
-    if schema is None:
+    if schema is None or not schema:
         return True, None
 
     if "anyOf" in schema:
@@ -123,6 +132,11 @@ def validate_data(data: Any, schema: dict[str, Any] | None) -> tuple[bool, str |
                 return True, None
             errors.append(error)
         return False, f"Value does not match any schemas: {'; '.join(filter(None, errors))}"
+
+    # Handle enum validation
+    if "enum" in schema:
+        if data not in schema["enum"]:
+            return False, f"Value '{data}' is not allowed. Must be one of: {schema['enum']}"
 
     schema_type = schema.get("type")
     if data is None:

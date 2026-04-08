@@ -38,9 +38,11 @@ class HttpListener(Listener):
         self.handler: Callable[[str, Any, dict[str, Any]], Awaitable[Any]] | None = None
         self._setup_middleware()
 
-    def _setup_middleware(self):
+    def _setup_middleware(self) -> None:
         @web.middleware
-        async def version_middleware(request, handler):
+        async def version_middleware(
+            request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]
+        ) -> web.StreamResponse:
             response = await handler(request)
             response.headers[PROTOCOL_VERSION_HEADER] = PROTOCOL_VERSION
             return response
@@ -58,7 +60,7 @@ class HttpListener(Listener):
         # App lifecycle is managed externally
         pass
 
-    def _setup_routes(self):
+    def _setup_routes(self) -> None:
         self.app.router.add_post(ENDPOINT_WORKER_REGISTER, self._handle_register)
         self.app.router.add_get(ENDPOINT_TASK_NEXT, self._handle_poll)
         self.app.router.add_post(ENDPOINT_TASK_RESULT, self._handle_result)
@@ -211,13 +213,21 @@ class HttpListener(Listener):
 
     async def _handle_ws(self, request: web.Request) -> web.StreamResponse:
         worker_id = request.match_info.get("worker_id")
-
-        ws = web.WebSocketResponse()
-        await ws.prepare(request)
-
         context = self._extract_context(request)
         if worker_id:
             context["worker_id_hint"] = worker_id
+
+        # Performing auth before handshake (breaking change but cleaner architecture)
+        if self.handler:
+            try:
+                await self.handler("websocket_auth", None, context)
+            except PermissionError as e:
+                return web.Response(status=403, text=str(e))
+            except Exception as e:
+                return web.Response(status=500, text=str(e))
+
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
 
         if self.handler:
             await self.handler("websocket", ws, context)

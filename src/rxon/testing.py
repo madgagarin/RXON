@@ -5,7 +5,7 @@
 
 from asyncio import Queue, wait_for
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 
 from rxon.models import (
     Heartbeat,
@@ -52,8 +52,8 @@ class MockTransport(Transport):
         try:
             item = await wait_for(self.task_queue.get(), timeout=timeout)
             if isinstance(item, dict):
-                return from_dict(TaskPayload, item)
-            return item
+                return cast(TaskPayload, from_dict(TaskPayload, item))
+            return cast(TaskPayload, item)
         except Exception:
             return None
 
@@ -73,18 +73,18 @@ class MockTransport(Transport):
         while self.connected:
             item = await self.command_queue.get()
             if isinstance(item, dict):
-                yield from_dict(WorkerCommand, item)
+                yield cast(WorkerCommand, from_dict(WorkerCommand, item))
             else:
-                yield item
+                yield cast(WorkerCommand, item)
 
     async def refresh_token(self) -> TokenResponse:
         self.token = "refreshed-mock-token"
         return TokenResponse(access_token=self.token, expires_in=3600, worker_id=self.worker_id)
 
-    def push_task(self, task: TaskPayload | dict[str, Any]):
+    def push_task(self, task: TaskPayload | dict[str, Any]) -> None:
         """Inject a task into the queue for the worker to pick up."""
         self.task_queue.put_nowait(task)
 
-    def push_command(self, command: WorkerCommand | dict[str, Any]):
+    def push_command(self, command: WorkerCommand | dict[str, Any]) -> None:
         """Inject a command into the queue."""
         self.command_queue.put_nowait(command)

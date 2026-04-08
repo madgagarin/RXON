@@ -1,16 +1,13 @@
-import asyncio
-import sys
-from pathlib import Path
+# Copyright (c) 2025-2026 Dmitrii Gagarin aka madgagarin
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import pytest
 
-# Add src to python path to ensure rxon can be imported
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+@pytest.fixture(autouse=True)
+def setup_logging() -> None:
+    import logging
 
-@pytest.fixture(scope="session")
-def event_loop_policy():
-    """
-    Prevent 'RuntimeError: Event loop is closed' issues with aiohttp in some environments.
-    """
-    return asyncio.get_event_loop_policy()
+    logging.basicConfig(level=logging.INFO)

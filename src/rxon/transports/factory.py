@@ -19,8 +19,12 @@ def create_transport(
     Factory function to create the appropriate Transport based on the URL scheme.
     Currently supports: http://, https://, mock://
     """
-    if url.startswith("http://") or url.startswith("https://"):
-        return HttpTransport(base_url=url, worker_id=worker_id, token=token, ssl_context=ssl_context, **kwargs)
+    if url.startswith(("http://", "https://", "ws://", "wss://")):
+        # HttpTransport handles ws/wss internally by converting the scheme
+        base_url = url
+        if url.startswith("ws"):
+            base_url = url.replace("ws", "http", 1)
+        return HttpTransport(base_url=base_url, worker_id=worker_id, token=token, ssl_context=ssl_context, **kwargs)
 
     if url.startswith("mock://"):
         return MockTransport(worker_id=worker_id, token=token, **kwargs)
