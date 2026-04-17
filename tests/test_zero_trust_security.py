@@ -69,9 +69,36 @@ def test_sign_payload_stable_sorting() -> None:
     assert sig1 == sig2
 
 
+def test_sign_payload_with_ignore_fields() -> None:
+    """Test that ignore_fields are actually ignored during signing."""
+    payload = {"worker_id": "w1", "status": "active", "temp_field": "ignore-me"}
+    secret = "secret"
+
+    # Sign ignoring temp_field
+    sig_ignored = sign_payload(payload, secret, ignore_fields=["temp_field"])
+
+    # Sign a payload that doesn't have the field at all
+    payload_clean = {"worker_id": "w1", "status": "active"}
+    sig_clean = sign_payload(payload_clean, secret)
+
+    assert sig_ignored == sig_clean
+    assert verify_signature(payload, sig_ignored, secret, ignore_fields=["temp_field"]) is True
+
+
+def test_sign_payload_auto_ignores_security() -> None:
+    """Test that 'security' field is always ignored by default."""
+    payload = {"id": "1", "security": {"signature": "abc"}}
+    secret = "key"
+
+    sig1 = sign_payload(payload, secret)
+    sig2 = sign_payload({"id": "1"}, secret)
+
+    assert sig1 == sig2
+
+
 def test_worker_registration_zero_trust_fields() -> None:
     """Test WorkerRegistration handles timestamp and security fields."""
-    ts = time.time()
+    ts = int(time.time())
     security = SecurityContext(signature="test-sig", signer_id="worker-1")
     reg = WorkerRegistration(worker_id="worker-1", worker_type="test", timestamp=ts, security=security)
 
@@ -89,7 +116,7 @@ def test_worker_registration_zero_trust_fields() -> None:
 
 def test_task_result_zero_trust_fields() -> None:
     """Test TaskResult handles timestamp and security fields."""
-    ts = time.time()
+    ts = int(time.time())
     security = SecurityContext(signature="test-sig", signer_id="worker-1")
     res = TaskResult(job_id="j1", task_id="t1", worker_id="worker-1", status="success", timestamp=ts, security=security)
 
@@ -105,7 +132,7 @@ def test_task_result_zero_trust_fields() -> None:
 
 def test_heartbeat_zero_trust_fields() -> None:
     """Test Heartbeat handles timestamp and security fields."""
-    ts = time.time()
+    ts = int(time.time())
     security = SecurityContext(signature="test-sig", signer_id="worker-1")
     hb = Heartbeat(worker_id="worker-1", status="ready", timestamp=ts, security=security)
 
@@ -121,7 +148,7 @@ def test_heartbeat_zero_trust_fields() -> None:
 
 def test_worker_event_payload_zero_trust_fields() -> None:
     """Test WorkerEventPayload handles timestamp and security fields."""
-    ts = time.time()
+    ts = int(time.time())
     security = SecurityContext(signature="test-sig", signer_id="worker-1")
     event = WorkerEventPayload(
         event_id="e1",

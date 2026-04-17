@@ -24,7 +24,6 @@ from rxon.models import (
     DeviceUsage,
     Heartbeat,
     ResourcesUsage,
-    SkillInfo,
     TaskPayload,
     TaskResult,
     TokenResponse,
@@ -61,6 +60,9 @@ async def server(unused_tcp_port_factory: Any) -> Any:
             state["heartbeats"].append(payload)
             return {"status": "ok"}
         elif msg_type == "poll":
+            # Store query params for verification in tests
+            raw_request = context.get("raw_request")
+            state["last_poll_params"] = raw_request.query if raw_request else {}
             if state["tasks_queue"]:
                 return state["tasks_queue"].pop(0)
             return None
@@ -121,15 +123,34 @@ async def test_heartbeat_hot_skills(server: tuple[str, dict[str, Any], HttpListe
     await transport.connect()
 
     try:
-        skill = SkillInfo(name="echo", description="Returns input")
         usage = ResourcesUsage(0.0, 0.5, [])
-        hb = Heartbeat(worker_id=worker_id, status="idle", usage=usage, current_tasks=[], hot_skills=[skill])
+        hb = Heartbeat(worker_id=worker_id, status="idle", usage=usage, current_tasks=[], hot_skills=["echo", "calc"])
         await transport.send_heartbeat(hb)
 
         assert len(state["heartbeats"]) == 1
         hot_skills = state["heartbeats"][0]["hot_skills"]
-        assert len(hot_skills) == 1
-        assert hot_skills[0]["name"] == "echo"
+        assert hot_skills == ["echo", "calc"]
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_poll_task_with_skills_filtering(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    base_url, state, _ = server
+    transport = create_transport(base_url, "w-poll", "token")
+    await transport.connect()
+
+    try:
+        await transport.poll_task(
+            timeout=1.0,
+            available_skills=["python", "rust"],
+            hot_skills=["python"],
+        )
+
+        params = state.get("last_poll_params", {})
+        assert params.get("available_skills") == "python,rust"
+        assert params.get("hot_skills") == "python"
+        assert params.get("timeout") == "1.0"
     finally:
         await transport.close()
 

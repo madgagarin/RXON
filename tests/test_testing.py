@@ -28,6 +28,12 @@ async def test_mock_transport_full_flow() -> None:
     assert task.params is not None
     assert task.params["n"] == 10
 
+    # Test skills filtering in poll_task (just verification of signature/call)
+    transport.push_task(TaskPayload("j2", "t2", "test"))
+    task2 = await transport.poll_task(timeout=0.1, available_skills=["s1"], hot_skills=["s2"])
+    assert task2 is not None
+    assert task2.job_id == "j2"
+
     res = TaskResult(job_id="j1", task_id="t1", worker_id="test-worker", status="success")
     await transport.send_result(res)
     assert len(transport.results) == 1

@@ -39,6 +39,16 @@ class BlobProvider(ABC):
         """Returns metadata (size, etag, content-type) for a URI."""
         pass
 
+    @abstractmethod
+    async def delete(self, uri: str) -> bool:
+        """Deletes a single object from storage."""
+        pass
+
+    @abstractmethod
+    async def delete_dir(self, uri: str) -> bool:
+        """Deletes all objects under a specific URI prefix."""
+        pass
+
 
 def calculate_config_hash(endpoint: str | None, access_key: str | None, bucket: str | None) -> str | None:
     """

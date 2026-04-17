@@ -17,8 +17,9 @@ En las redes tradicionales, los comandos suelen fluir "de arriba hacia abajo" (m
 ## ✨ Características principales
 
 -   **Conexión Inversa (PULL)**: Los nodos se conectan al orquestador para obtener tareas, lo que garantiza la compatibilidad con entornos de red complejos.
--   **Seguridad Zero Trust**: Soporte integrado para firmas digitales (`SecurityContext`) y cadenas de identidad. Todos los mensajes pueden ser verificados criptográficamente a través de múltiples capas de holarquía.
--   **Agnóstico y extensible**: Los modelos principales (recursos, habilidades, tareas) son totalmente extensibles mediante campos universales `metadata` y `properties`, lo que hace que el protocolo sea adecuado para IA, IoT y robótica.
+-   **Seguridad Zero Trust**: Soporte integrado para firmas digitales (`SecurityContext`) y cadenas de identidad. Todos los mensajes utilizan marcas de tiempo estrictamente enteras para estabilidad criptográfica.
+-   **Agnóstico y extensible**: Los modelos principales son totalmente extensibles. `TaskResult` soporta `origin_worker_id` para una trazabilidad transparente en holarquías profundas.
+
 -   **Telemetría Universal**: Los heartbeats incluyen métricas detalladas de CPU, RAM y cualquier dispositivo personalizado (sensores, GPUs, actuadores) a través del modelo extensible `HardwareDevice`.
 -   **Sistema de Eventos Genérico**: Mecanismo unificado de señalización para actualizaciones de progreso, alertas personalizadas y disparadores en tiempo real con burbujeo jerárquico de eventos.
 -   **Smart matching de recursos**: Lógica formalizada para requisitos de hardware utilizando la lógica **GE (Greater or Equal)** para números y coincidencia parcial para modelos.

@@ -35,7 +35,7 @@ def _get_cached_type_hints(cls: type) -> dict[str, Any]:
 
 
 def to_dict(obj: Any) -> Any:
-    """Recursively converts Models, Enums and UUIDs to dicts for JSON serialization."""
+    """Recursively converts Models, Enums and UUIDs to dicts for JSON serialization. Strips None values."""
     if isinstance(obj, Enum):
         return obj.value
 
@@ -43,15 +43,15 @@ def to_dict(obj: Any) -> Any:
         return str(obj)
 
     if hasattr(obj, "_asdict"):
-        return {k: to_dict(v) for k, v in obj._asdict().items()}
+        return {k: to_dict(v) for k, v in obj._asdict().items() if v is not None}
 
     if hasattr(obj, "__dataclass_fields__"):
-        return {f.name: to_dict(getattr(obj, f.name)) for f in fields(obj)}
+        return {f.name: to_dict(getattr(obj, f.name)) for f in fields(obj) if getattr(obj, f.name) is not None}
 
     if isinstance(obj, (list, tuple)):
-        return [to_dict(i) for i in obj]
+        return [to_dict(i) for i in obj if i is not None]
     if isinstance(obj, dict):
-        return {k: to_dict(v) for k, v in obj.items()}
+        return {k: to_dict(v) for k, v in obj.items() if v is not None}
     return obj
 
 

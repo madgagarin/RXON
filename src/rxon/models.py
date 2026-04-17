@@ -189,6 +189,8 @@ class WorkerRegistration(NamedTuple):
     worker_id: str
     worker_type: str = "generic"
     supported_skills: list[SkillInfo] | None = None
+    available_skills: list[str] | None = None
+    hot_skills: list[str] | None = None
     resources: Resources | None = None
     installed_software: dict[str, str] | None = None
     installed_artifacts: list[InstalledArtifact] | None = None
@@ -196,7 +198,7 @@ class WorkerRegistration(NamedTuple):
     skills_hash: str | None = None
     security: SecurityContext | None = None
     metadata: dict[str, Any] | None = None
-    timestamp: float | None = None
+    timestamp: int | None = None
 
 
 class TokenResponse(NamedTuple):
@@ -217,7 +219,7 @@ class WorkerEventPayload(NamedTuple):
     target_task_id: str | None = None
     trace_context: dict[str, str] | None = None
     priority: float = 0.0
-    timestamp: float | None = None
+    timestamp: int | None = None
     security: SecurityContext | None = None
     metadata: dict[str, Any] | None = None
 
@@ -241,6 +243,7 @@ class TaskPayload(NamedTuple):
     deadline: float | None = None
     security: SecurityContext | None = None
     metadata: dict[str, Any] | None = None
+    timestamp: int | None = None
 
 
 class TaskError(NamedTuple):
@@ -253,13 +256,14 @@ class TaskResult(NamedTuple):
     job_id: str
     task_id: str
     worker_id: str | None = None
+    origin_worker_id: str | None = None
     status: str = "success"
     data: dict[str, Any] | None = None
     error: TaskError | None = None
     data_metadata: dict[str, FileMetadata] | None = None
     security: SecurityContext | None = None
     metadata: dict[str, Any] | None = None
-    timestamp: float | None = None
+    timestamp: int | None = None
 
 
 class Heartbeat(NamedTuple):
@@ -268,10 +272,9 @@ class Heartbeat(NamedTuple):
     usage: ResourcesUsage | None = None
     current_tasks: list[str] | None = None
     supported_skills: list[SkillInfo] | None = None
-    hot_cache: list[str] | None = None
-    skill_dependencies: dict[str, list[str]] | None = None
-    hot_skills: list[SkillInfo] | None = None
+    available_skills: list[str] | None = None
+    hot_skills: list[str] | None = None
     skills_hash: str | None = None
     security: SecurityContext | None = None
     metadata: dict[str, Any] | None = None
-    timestamp: float | None = None
+    timestamp: int | None = None

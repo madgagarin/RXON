@@ -163,9 +163,20 @@ class HttpTransport(Transport):
     async def register(self, registration: WorkerRegistration) -> Any:
         return await self._request("POST", ENDPOINT_WORKER_REGISTER, json=registration)
 
-    async def poll_task(self, timeout: float = 30.0) -> TaskPayload | None:
+    async def poll_task(
+        self,
+        timeout: float = 30.0,
+        available_skills: list[str] | None = None,
+        hot_skills: list[str] | None = None,
+    ) -> TaskPayload | None:
         endpoint = ENDPOINT_TASK_NEXT.format(worker_id=self.worker_id)
-        data = await self._request("GET", endpoint, timeout=ClientTimeout(total=timeout + 5))
+        params: dict[str, Any] = {"timeout": timeout}
+        if available_skills:
+            params["available_skills"] = ",".join(available_skills)
+        if hot_skills:
+            params["hot_skills"] = ",".join(hot_skills)
+
+        data = await self._request("GET", endpoint, params=params, timeout=ClientTimeout(total=timeout + 5))
         return cast(TaskPayload | None, from_dict(TaskPayload, data) if data else None)
 
     async def send_result(self, result: TaskResult, max_retries: int | None = None, delay: float | None = None) -> bool:

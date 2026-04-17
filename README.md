@@ -17,8 +17,8 @@ In traditional networks, commands usually flow "top-down" (Push model). In **RXO
 ## ✨ Key Features
 
 -   **Reverse Connection (PULL)**: Nodes connect to the orchestrator to pull tasks, ensuring compatibility with complex network environments.
--   **Zero Trust Security**: Built-in support for digital signatures (`SecurityContext`) and identity chains. All messages can be cryptographically verified across multiple holarchy layers.
--   **Agnostic & Extensible**: Core models (Resources, Skills, Tasks) are fully extensible via universal `metadata` and `properties` fields, making the protocol suitable for AI, IoT, and Robotics.
+-   **Zero Trust Security**: Built-in support for digital signatures (`SecurityContext`) and identity chains. All messages use strictly integer timestamps for cryptographic stability and can be verified across multiple holarchy layers.
+-   **Agnostic & Extensible**: Core models (Resources, Skills, Tasks) are fully extensible via universal `metadata` and `properties` fields. `TaskResult` supports `origin_worker_id` for transparent traceability in deep holarchies.
 -   **Universal Telemetry**: Heartbeats include granular metrics for CPU, RAM, and any custom devices (Sensors, GPUs, Actuators) via the extensible `HardwareDevice` model.
 -   **Generic Event System**: Unified signaling for progress updates, custom alerts, and real-time triggers with hierarchical event bubbling.
 -   **Smart Resource Matching**: Formalized logic for hardware requirements using **GE (Greater or Equal)** logic for numbers and partial string matching for models.

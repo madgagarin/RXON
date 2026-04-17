@@ -39,7 +39,12 @@ class Transport(ABC):
         pass
 
     @abstractmethod
-    async def poll_task(self, timeout: float = 30.0) -> TaskPayload | None:
+    async def poll_task(
+        self,
+        timeout: float = 30.0,
+        available_skills: list[str] | None = None,
+        hot_skills: list[str] | None = None,
+    ) -> TaskPayload | None:
         """Wait for the next task from the orchestrator."""
         pass
 

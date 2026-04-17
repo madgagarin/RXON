@@ -48,7 +48,12 @@ class MockTransport(Transport):
         self.registered.append(registration)
         return {"status": "registered", "worker_id": self.worker_id}
 
-    async def poll_task(self, timeout: float = 30.0) -> TaskPayload | None:
+    async def poll_task(
+        self,
+        timeout: float = 30.0,
+        available_skills: list[str] | None = None,
+        hot_skills: list[str] | None = None,
+    ) -> TaskPayload | None:
         try:
             item = await wait_for(self.task_queue.get(), timeout=timeout)
             if isinstance(item, dict):

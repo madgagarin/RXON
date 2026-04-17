@@ -22,19 +22,33 @@ __all__ = [
 ]
 
 
-def sign_payload(payload: Any, secret: str) -> str:
-    """Signs a payload using HMAC SHA256."""
+def sign_payload(payload: Any, secret: str, ignore_fields: list[str] | None = None) -> str:
+    """
+    Signs a payload using HMAC SHA256.
+    :param payload: Data to sign (Model, dict, or list)
+    :param secret: Secret key
+    :param ignore_fields: List of top-level fields to exclude from signing (e.g., 'security')
+    """
     if not secret:
         raise ValueError("Secret key for signing cannot be empty.")
-    message = orjson.dumps(to_dict(payload), option=orjson.OPT_SORT_KEYS)
+
+    data = to_dict(payload)
+    if isinstance(data, dict):
+        data = dict(data)  # Shallow copy to avoid modifying original
+        data.pop("security", None)
+        if ignore_fields:
+            for field in ignore_fields:
+                data.pop(field, None)
+
+    message = orjson.dumps(data, option=orjson.OPT_SORT_KEYS)
     return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
 
 
-def verify_signature(payload: Any, signature: str, secret: str) -> bool:
+def verify_signature(payload: Any, signature: str, secret: str, ignore_fields: list[str] | None = None) -> bool:
     """Verifies the HMAC SHA256 signature of a payload using constant-time comparison."""
     if not signature or not secret:
         return False
-    expected_signature = sign_payload(payload, secret)
+    expected_signature = sign_payload(payload, secret, ignore_fields=ignore_fields)
     return hmac.compare_digest(expected_signature, signature)
 
 

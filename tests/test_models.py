@@ -60,6 +60,32 @@ def test_task_result_minimal() -> None:
     assert res.data is None
 
 
+def test_task_result_origin_id_and_timestamp() -> None:
+    res = TaskResult(
+        job_id="j1",
+        task_id="t1",
+        worker_id="proxy-1",
+        origin_worker_id="real-worker-01",
+        timestamp=12345678,
+    )
+    d = to_dict(res)
+    assert d["origin_worker_id"] == "real-worker-01"
+    assert d["timestamp"] == 12345678
+
+    from rxon.utils import from_dict
+
+    restored = from_dict(TaskResult, d)
+    assert restored.origin_worker_id == "real-worker-01"
+    assert restored.timestamp == 12345678
+
+
+def test_task_payload_with_timestamp() -> None:
+    payload = TaskPayload(job_id="j1", task_id="t1", type="test", timestamp=999)
+    assert payload.timestamp == 999
+    d = to_dict(payload)
+    assert d["timestamp"] == 999
+
+
 def test_models_empty_collections_serialization() -> None:
     hb = Heartbeat(
         worker_id="w1",
@@ -73,8 +99,8 @@ def test_models_empty_collections_serialization() -> None:
 
     hb2 = Heartbeat(worker_id="w2", status="idle")
     d2 = to_dict(hb2)
-    assert d2["current_tasks"] is None
-    assert d2["metadata"] is None
+    assert "current_tasks" not in d2
+    assert "metadata" not in d2
 
 
 def test_heartbeat_minimal() -> None:
