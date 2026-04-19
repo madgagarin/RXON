@@ -5,8 +5,11 @@
 
 from abc import ABC, abstractmethod
 from hashlib import sha256
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
+
+if TYPE_CHECKING:
+    from rxon.models import FileMetadata
 
 __all__ = [
     "RXON_BLOB_SCHEME",
@@ -17,7 +20,6 @@ __all__ = [
 
 RXON_BLOB_SCHEME = "s3"
 
-
 class BlobProvider(ABC):
     """
     Abstract interface for Blob Storage providers (S3, GCS, Local).
@@ -25,8 +27,8 @@ class BlobProvider(ABC):
     """
 
     @abstractmethod
-    async def upload(self, local_path: str, uri: str) -> str:
-        """Uploads a local file to the storage and returns the URI/ETag."""
+    async def upload(self, local_path: str, uri: str) -> "FileMetadata":
+        """Uploads a local file to the storage and returns FileMetadata."""
         pass
 
     @abstractmethod
@@ -49,7 +51,6 @@ class BlobProvider(ABC):
         """Deletes all objects under a specific URI prefix."""
         pass
 
-
 def calculate_config_hash(endpoint: str | None, access_key: str | None, bucket: str | None) -> str | None:
     """
     Calculates a consistent hash of the Blob/S3 configuration.
@@ -61,7 +62,6 @@ def calculate_config_hash(endpoint: str | None, access_key: str | None, bucket: 
 
     config_str = f"{endpoint}|{access_key}|{bucket}"
     return sha256(config_str.encode()).hexdigest()[:16]
-
 
 def parse_uri(uri: str, default_bucket: str | None = None, prefix: str = "") -> tuple[str, str, bool]:
     """

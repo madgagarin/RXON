@@ -29,14 +29,14 @@ def test_hardware_device_matches_properties() -> None:
 
 
 def test_resources_matches_compute() -> None:
-    res = Resources(cpu_cores=16, ram_gb=64.5)
+    res = Resources(properties={"cpu_cores": 16, "ram_gb": 64.5})
 
-    assert res.matches(Resources(cpu_cores=8))
-    assert res.matches(Resources(ram_gb=32.0))
-    assert res.matches(Resources(cpu_cores=16, ram_gb=64.5))
+    assert res.matches(Resources(properties={"cpu_cores": 8}))
+    assert res.matches(Resources(properties={"ram_gb": 32.0}))
+    assert res.matches(Resources(properties={"cpu_cores": 16, "ram_gb": 64.5}))
 
-    assert not res.matches(Resources(cpu_cores=32))
-    assert not res.matches(Resources(ram_gb=128))
+    assert not res.matches(Resources(properties={"cpu_cores": 32}))
+    assert not res.matches(Resources(properties={"ram_gb": 128}))
 
 
 def test_resources_matches_multi_device() -> None:
@@ -170,3 +170,47 @@ def test_resources_complex_multi_device_matching() -> None:
         ]
     )
     assert not res.matches(req_fail)
+
+
+def test_matching_advanced_lists() -> None:
+    # 1. Positive: intersection and inclusion
+    res = Resources(properties={"os": "linux", "tier": 1})
+    assert res.matches(Resources(properties={"os": ["linux", "darwin"]}))
+
+    res2 = Resources(properties={"tags": ["fast", "gpu", "local"]})
+    assert res2.matches(Resources(properties={"tags": "gpu"}))
+    assert res2.matches(Resources(properties={"tags": ["gpu", "remote"]}))
+
+    # 2. Negative: no intersection
+    assert not res.matches(Resources(properties={"os": ["windows", "darwin"]}))
+    assert not res2.matches(Resources(properties={"tags": ["remote", "slow"]}))
+    assert not res2.matches(Resources(properties={"tags": "remote"}))
+
+    # 3. Boundary: empty lists
+    # Empty requirement list logic check
+    # Boundary case check
+    assert not res2.matches(Resources(properties={"tags": []}))
+
+    # Worker with empty list should not match requirement with value
+    res_empty = Resources(properties={"tags": []})
+    assert not res_empty.matches(Resources(properties={"tags": "gpu"}))
+    assert not res_empty.matches(Resources(properties={"tags": ["gpu"]}))
+
+    # 4. Type safety
+    # List vs Number comparison
+    assert not res2.matches(Resources(properties={"tags": 123}))
+    # Value matches element in list
+    assert Resources(properties={"val": 10}).matches(Resources(properties={"val": [10, 20]}))
+
+
+def test_hardware_device_list_matching_logic() -> None:
+    # Testing lists inside HardwareDevice properties
+    gpu = HardwareDevice(type="gpu", properties={"modes": ["compute", "graphics", "video"]})
+
+    # Positive
+    assert gpu.matches(HardwareDevice(type="gpu", properties={"modes": "compute"}))
+    assert gpu.matches(HardwareDevice(type="gpu", properties={"modes": ["video", "graphics"]}))
+
+    # Negative
+    assert not gpu.matches(HardwareDevice(type="gpu", properties={"modes": "gaming"}))
+    assert not gpu.matches(HardwareDevice(type="gpu", properties={"modes": ["gaming", "mining"]}))

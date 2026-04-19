@@ -4,7 +4,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 from dataclasses import dataclass
-from typing import NamedTuple
+from enum import Enum
+from typing import Any, NamedTuple
 
 from rxon.schema import (
     extract_json_schema,
@@ -140,8 +141,6 @@ def test_extract_from_func() -> None:
 
 
 def test_extract_json_schema_enum() -> None:
-    from enum import Enum
-
     class Color(Enum):
         RED = "red"
         BLUE = "blue"
@@ -151,8 +150,6 @@ def test_extract_json_schema_enum() -> None:
 
 
 def test_extract_json_schema_any() -> None:
-    from typing import Any
-
     schema = extract_json_schema(Any)
     assert schema == {}
 

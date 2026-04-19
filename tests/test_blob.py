@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 
 from rxon.blob import BlobProvider, calculate_config_hash, parse_uri
+from rxon.models import FileMetadata
 
 
 def test_calculate_config_hash() -> None:
@@ -51,8 +52,8 @@ def test_parse_uri_empty() -> None:
 
 
 class MockBlobProvider(BlobProvider):
-    async def upload(self, local_path: str, uri: str) -> str:
-        return uri
+    async def upload(self, local_path: str, uri: str) -> FileMetadata:
+        return FileMetadata(uri=uri, size=100, etag="fake-etag")
 
     async def download(self, uri: str, local_path: str) -> bool:
         return True

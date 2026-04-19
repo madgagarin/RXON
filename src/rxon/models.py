@@ -6,6 +6,8 @@
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
+from rxon.schema import validate_data
+
 __all__ = [
     "HardwareDevice",
     "DeviceUsage",
@@ -26,7 +28,6 @@ __all__ = [
     "Heartbeat",
 ]
 
-
 class HardwareDevice(NamedTuple):
     type: str
     model: str | None = None
@@ -35,7 +36,7 @@ class HardwareDevice(NamedTuple):
     metrics: dict[str, Any] | None = None
 
     def matches(self, req: "HardwareDevice") -> bool:
-        """Checks if this device matches the requirements using Smart Comparison (GE logic for numbers)."""
+        """Checks if this device matches the requirements (GE logic for numbers, inclusion for lists)."""
         if req.type and self.type != req.type:
             return False
 
@@ -57,37 +58,35 @@ class HardwareDevice(NamedTuple):
             if isinstance(req_v, (int, float)) and isinstance(my_v, (int, float)):
                 if my_v < req_v:
                     return False
+            elif isinstance(req_v, list):
+                if isinstance(my_v, list):
+                    if not any(v in req_v for v in my_v):
+                        return False
+                elif my_v not in req_v:
+                    return False
+            elif isinstance(my_v, list):
+                if req_v not in my_v:
+                    return False
             elif my_v != req_v:
                 return False
         return True
-
 
 class DeviceUsage(NamedTuple):
     unit_id: str
     load_percent: float
     metrics: dict[str, Any] | None = None
 
-
 class ResourcesUsage(NamedTuple):
     cpu_load_percent: float = 0.0
     ram_used_gb: float = 0.0
     devices_usage: list[DeviceUsage] | None = None
 
-
 class Resources(NamedTuple):
-    max_concurrent_tasks: int = 1
-    cpu_cores: int | None = None
-    ram_gb: float | None = None
-    devices: list[HardwareDevice] | None = None
+    devices: list["HardwareDevice"] | None = None
     properties: dict[str, Any] | None = None
 
     def matches(self, req: "Resources") -> bool:
-        """Checks if these resources meet the requirements (GE logic for compute fields)."""
-        if req.cpu_cores and (self.cpu_cores or 0) < req.cpu_cores:
-            return False
-        if req.ram_gb and (self.ram_gb or 0.0) < req.ram_gb:
-            return False
-
+        """Checks if these resources meet the requirements (GE logic for numeric properties, inclusion for lists)."""
         if req.devices:
             my_devices = list(self.devices or [])
             for req_dev in req.devices:
@@ -109,10 +108,18 @@ class Resources(NamedTuple):
                 if isinstance(req_v, (int, float)) and isinstance(my_v, (int, float)):
                     if my_v < req_v:
                         return False
+                elif isinstance(req_v, list):
+                    if isinstance(my_v, list):
+                        if not any(v in req_v for v in my_v):
+                            return False
+                    elif my_v not in req_v:
+                        return False
+                elif isinstance(my_v, list):
+                    if req_v not in my_v:
+                        return False
                 elif my_v != req_v:
                     return False
         return True
-
 
 class InstalledArtifact(NamedTuple):
     name: str
@@ -121,6 +128,7 @@ class InstalledArtifact(NamedTuple):
     properties: dict[str, Any] | None = None
 
     def matches(self, req: "InstalledArtifact") -> bool:
+        """Checks if this artifact matches the requirements (GE logic for numeric properties, inclusion for lists)."""
         if self.name != req.name:
             return False
         if req.version != "unknown" and req.version != self.version:
@@ -137,10 +145,18 @@ class InstalledArtifact(NamedTuple):
             if isinstance(req_v, (int, float)) and isinstance(my_v, (int, float)):
                 if my_v < req_v:
                     return False
+            elif isinstance(req_v, list):
+                if isinstance(my_v, list):
+                    if not any(v in req_v for v in my_v):
+                        return False
+                elif my_v not in req_v:
+                    return False
+            elif isinstance(my_v, list):
+                if req_v not in my_v:
+                    return False
             elif my_v != req_v:
                 return False
         return True
-
 
 @dataclass(frozen=True, slots=True)
 class SkillInfo:
@@ -155,11 +171,20 @@ class SkillInfo:
     schema_dialect: str = "json-schema"
     properties: dict[str, Any] | None = None
 
+    def matches(self, req: "SkillInfo") -> bool:
+        """Checks if this skill meets the requirements."""
+        if self.name != req.name:
+            return False
+        if req.type is not None and self.type != req.type:
+            return False
+        if req.version is not None and self.version != req.version:
+            return False
+        return True
+
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, SkillInfo):
             return NotImplemented
         return self.name < other.name
-
 
 class SecurityContext(NamedTuple):
     """Security metadata for Zero Trust identity and verification."""
@@ -169,7 +194,6 @@ class SecurityContext(NamedTuple):
     identity_chain: list[str] | None = None
     metadata: dict[str, Any] | None = None
 
-
 class WorkerCapabilities(NamedTuple):
     hostname: str = "unknown"
     ip_address: str = "0.0.0.0"
@@ -177,13 +201,11 @@ class WorkerCapabilities(NamedTuple):
     s3_config_hash: str | None = None
     extra: dict[str, Any] | None = None
 
-
 class FileMetadata(NamedTuple):
     uri: str
     size: int = 0
     etag: str | None = None
     metadata: dict[str, Any] | None = None
-
 
 class WorkerRegistration(NamedTuple):
     worker_id: str
@@ -200,13 +222,11 @@ class WorkerRegistration(NamedTuple):
     metadata: dict[str, Any] | None = None
     timestamp: int | None = None
 
-
 class TokenResponse(NamedTuple):
     access_token: str
     expires_in: int
     worker_id: str
     metadata: dict[str, Any] | None = None
-
 
 class WorkerEventPayload(NamedTuple):
     event_id: str
@@ -214,6 +234,7 @@ class WorkerEventPayload(NamedTuple):
     origin_worker_id: str
     event_type: str
     payload: dict[str, Any]
+    origin_task_id: str | None = None
     bubbling_chain: list[str] | None = None
     target_job_id: str | None = None
     target_task_id: str | None = None
@@ -223,14 +244,12 @@ class WorkerEventPayload(NamedTuple):
     security: SecurityContext | None = None
     metadata: dict[str, Any] | None = None
 
-
 class WorkerCommand(NamedTuple):
     command: str
     task_id: str | None = None
     job_id: str | None = None
     params: dict[str, Any] | None = None
     metadata: dict[str, Any] | None = None
-
 
 class TaskPayload(NamedTuple):
     job_id: str
@@ -240,17 +259,25 @@ class TaskPayload(NamedTuple):
     tracing_context: dict[str, str] | None = None
     params_metadata: dict[str, FileMetadata] | None = None
     priority: float = 0.0
-    deadline: float | None = None
+    deadline: int | None = None
     security: SecurityContext | None = None
     metadata: dict[str, Any] | None = None
     timestamp: int | None = None
 
+    def validate_params(self, skill: SkillInfo) -> tuple[bool, str | None]:
+        """
+        Validates task params against the skill's input schema.
+        Returns (is_valid, error_message).
+        """
+        if not skill.input_schema:
+            return True, None
+
+        return validate_data(self.params, skill.input_schema)
 
 class TaskError(NamedTuple):
     code: str
     message: str
     details: dict[str, Any] | None = None
-
 
 class TaskResult(NamedTuple):
     job_id: str
@@ -264,7 +291,6 @@ class TaskResult(NamedTuple):
     security: SecurityContext | None = None
     metadata: dict[str, Any] | None = None
     timestamp: int | None = None
-
 
 class Heartbeat(NamedTuple):
     worker_id: str

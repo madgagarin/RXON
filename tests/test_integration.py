@@ -18,6 +18,7 @@ from rxon.constants import (
     EVENT_TYPE_PROGRESS,
     IGNORED_REASON_LATE,
     PROTOCOL_VERSION_HEADER,
+    WS_ENDPOINT,
 )
 from rxon.exceptions import RxonAuthError, RxonProtocolError
 from rxon.models import (
@@ -367,7 +368,7 @@ async def test_websocket_error_handling(server: tuple[str, dict[str, Any], HttpL
     await transport.connect()
 
     try:
-        async for _ in transport.listen_for_commands():
+        async for _ in transport.listen_for_commands(reconnect=False):
             pass
     finally:
         await transport.close()
@@ -385,8 +386,6 @@ async def test_websocket_auth_rejection(server: tuple[str, dict[str, Any], HttpL
     listener.handler = rejection_handler
 
     async with ClientSession() as session:
-        from rxon.constants import WS_ENDPOINT
-
         ws_url = f"{base_url.replace('http', 'ws', 1)}{WS_ENDPOINT}/worker-denied"
         try:
             async with session.ws_connect(ws_url) as _:
@@ -427,6 +426,49 @@ async def test_server_error_400_invalid_payload(server: tuple[str, dict[str, Any
     try:
         with pytest.raises(RxonProtocolError, match="HTTP 400"):
             await transport.register(WorkerRegistration("worker-bad"))
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_websocket_reconnection_logic(server: tuple[str, dict[str, Any], HttpListener], monkeypatch: Any) -> None:
+    # Simulate connection drop and recovery
+    base_url, state, listener = server
+    worker_id = "ws-reconnect"
+
+    # Mocking asyncio.sleep
+    sleep_calls = 0
+
+    async def mock_sleep(seconds: float) -> None:
+        nonlocal sleep_calls
+        sleep_calls += 1
+
+    monkeypatch.setattr("rxon.transports.http.sleep", mock_sleep)
+
+    attempts = 0
+
+    async def failing_ws_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        nonlocal attempts
+        if msg_type == "websocket_auth":
+            attempts += 1
+            if attempts <= 2:  # Fail first two attempts
+                raise PermissionError("Temporary Failure")
+            return {"status": "ok"}
+        if msg_type == "websocket":
+            ws = payload
+            await ws.send_json(to_dict(WorkerCommand(command="reconnected")))
+            await ws.close()
+
+    listener.handler = failing_ws_handler
+    transport = create_transport(base_url, worker_id, "token")
+    await transport.connect()
+
+    try:
+        commands = transport.listen_for_commands()
+        cmd = await anext(commands)
+        assert cmd.command == "reconnected"
+        assert attempts == 3  # Success on third attempt
+        assert sleep_calls == 2  # Two retries before success
     finally:
         await transport.close()
 

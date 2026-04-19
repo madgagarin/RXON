@@ -11,7 +11,7 @@ async def test_mock_transport_full_flow() -> None:
     await transport.connect()
     assert transport.connected
 
-    reg = WorkerRegistration(worker_id="test-worker", resources=Resources(cpu_cores=2))
+    reg = WorkerRegistration(worker_id="test-worker", resources=Resources(properties={"cpu_cores": 2}))
     resp = await transport.register(reg)
     assert resp["status"] == "registered"
     assert len(transport.registered) == 1

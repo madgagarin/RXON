@@ -58,7 +58,7 @@ __all__ = [
     "HB_RESP_CANCEL_TASKS",
 ]
 
-PROTOCOL_VERSION = "1.0b9"
+PROTOCOL_VERSION = "1.0b10"
 PROTOCOL_VERSION_HEADER = "X-RXON-Version"
 
 AUTH_HEADER_CLIENT = "X-Client-Token"
@@ -116,3 +116,6 @@ JOB_STATUS_QUARANTINED = "quarantined"
 JOB_STATUS_CANCELLED = "cancelled"
 JOB_STATUS_WAITING_FOR_HUMAN = "waiting_for_human"
 JOB_STATUS_WAITING_FOR_PARALLEL = "waiting_for_parallel_tasks"
+
+WORKER_STATUS_ACTIVE = "active"
+WORKER_STATUS_DRAINING = "draining"

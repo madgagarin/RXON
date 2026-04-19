@@ -9,23 +9,104 @@ from rxon.models import (
     Heartbeat,
     Resources,
     SecurityContext,
+    SkillInfo,
     TaskPayload,
     TaskResult,
+    WorkerEventPayload,
     WorkerRegistration,
 )
-from rxon.utils import to_dict
+from rxon.utils import from_dict, to_dict
+
+
+def test_skill_info_matches_edge_cases() -> None:
+    # Base skill
+    skill = SkillInfo(name="echo", type="service", version="1.0.0")
+
+    # Positive: partial requirements
+    assert skill.matches(SkillInfo(name="echo"))
+    assert skill.matches(SkillInfo(name="echo", type=None, version=None))
+
+    # Negative: empty strings vs None
+    assert not skill.matches(SkillInfo(name=""))
+    assert not skill.matches(SkillInfo(name="echo", type=""))
+
+    # Worker with incomplete data match check
+    skill_incomplete = SkillInfo(name="echo")
+    assert not skill_incomplete.matches(SkillInfo(name="echo", version="1.0.0"))
+
+
+def test_task_payload_validation_advanced() -> None:
+    # Nested schema with complex types
+    skill = SkillInfo(
+        name="process",
+        input_schema={
+            "type": "object",
+            "properties": {"count": {"type": "integer"}, "tags": {"type": "array", "items": {"type": "string"}}},
+            "required": ["count"],
+        },
+    )
+
+    # Valid
+    assert TaskPayload("j", "t", "p", {"count": 1}).validate_params(skill)[0] is True
+
+    # Invalid: type mismatch (float instead of int)
+    is_valid, err = TaskPayload("j", "t", "p", {"count": 1.5}).validate_params(skill)
+    assert is_valid is False
+    assert "Expected integer" in err
+
+    # Invalid: array item type mismatch
+    is_valid, err = TaskPayload("j", "t", "p", {"count": 5, "tags": [1, "2"]}).validate_params(skill)
+    assert is_valid is False
+    assert "Expected string" in err
+
+    # Invalid: params=None for object schema
+    skill_optional = SkillInfo(name="opt", input_schema={"type": "object"})
+    assert TaskPayload("j", "t", "p", None).validate_params(skill_optional)[0] is False
+    assert TaskPayload("j", "t", "p", {}).validate_params(skill_optional)[0] is True
+
+
+def test_task_payload_validation_no_params() -> None:
+    # Case: missing required field
+    skill = SkillInfo(name="echo", input_schema={"type": "object", "required": ["msg"]})
+    task = TaskPayload(job_id="j1", task_id="t1", type="echo", params=None)
+
+    is_valid, err = task.validate_params(skill)
+    assert is_valid is False
+    assert "Expected object, got null" in err
+
+
+def test_worker_event_traceability() -> None:
+    event = WorkerEventPayload(
+        event_id="e1",
+        worker_id="w1",
+        origin_worker_id="w0",
+        origin_task_id="t0",
+        event_type="progress",
+        payload={"done": 50},
+    )
+    assert event.origin_task_id == "t0"
+    d = to_dict(event)
+    assert d["origin_task_id"] == "t0"
+
+
+def test_task_payload_deadline_int() -> None:
+    # Testing integer deadline for Beta 10
+    task = TaskPayload(job_id="j1", task_id="t1", type="echo", deadline=1713456789)
+    assert isinstance(task.deadline, int)
+    d = to_dict(task)
+    assert d["deadline"] == 1713456789
 
 
 def test_worker_registration_serialization() -> None:
     reg = WorkerRegistration(
         worker_id="test-1",
         supported_skills=[],
-        resources=Resources(cpu_cores=4, ram_gb=16.0),
+        resources=Resources(properties={"cpu_cores": 4, "ram_gb": 16.0}),
         security=SecurityContext(signature="sig123", signer_id="boss"),
     )
     d = to_dict(reg)
     assert d["worker_id"] == "test-1"
-    assert d["resources"]["cpu_cores"] == 4
+    assert d["resources"]["properties"]["cpu_cores"] == 4
     assert d["security"]["signature"] == "sig123"
 
 
@@ -41,11 +122,6 @@ def test_hardware_device_to_dict() -> None:
     d = to_dict(dev)
     assert d["type"] == "gpu"
     assert d["properties"]["vram"] == 40
-
-
-def test_resources_default_concurrent() -> None:
-    res = Resources()
-    assert res.max_concurrent_tasks == 1
 
 
 def test_security_context_empty() -> None:
@@ -71,8 +147,6 @@ def test_task_result_origin_id_and_timestamp() -> None:
     d = to_dict(res)
     assert d["origin_worker_id"] == "real-worker-01"
     assert d["timestamp"] == 12345678
-
-    from rxon.utils import from_dict
 
     restored = from_dict(TaskResult, d)
     assert restored.origin_worker_id == "real-worker-01"

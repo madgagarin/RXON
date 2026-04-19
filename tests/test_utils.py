@@ -6,7 +6,50 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from rxon.utils import from_dict, json_dumps, to_dict
+from rxon.utils import _get_cached_type_hints, from_dict, json_dumps, to_dict
+
+
+def test_to_dict_recursion_limit() -> None:
+    # 1. Circular reference
+    a: dict[str, Any] = {}
+    a["loop"] = a
+    with pytest.raises(RecursionError, match="Maximum recursion depth"):
+        to_dict(a)
+
+    # 2. Boundary: Exactly 100 levels (should pass)
+    # Depth counting logic
+    # Recursion tracking
+    root: dict[str, Any] = {"v": 0}
+    curr = root
+    for i in range(1, 100):
+        curr["n"] = {"v": i}
+        curr = curr["n"]
+
+    # Depth 99 check
+    result = to_dict(root)
+    assert result["n"]["v"] == 1
+
+    # 3. Boundary: 101 levels (should fail)
+    curr["extra"] = {"final": True}
+    with pytest.raises(RecursionError, match="Maximum recursion depth"):
+        to_dict(root)
+
+    # 4. Mixed structures
+    complex_deep = {"a": [{"b": [{"c": "end"}]}]}  # 5 levels of recursion
+    assert to_dict(complex_deep)["a"][0]["b"][0]["c"] == "end"
+
+
+def test_to_dict_normalization_floats() -> None:
+    # Float to Int normalization check
+    data = {"val": 10.0, "nested": [1.0, 2.5]}
+    result = to_dict(data)
+
+    assert isinstance(result["val"], int)
+    assert result["val"] == 10
+    assert isinstance(result["nested"][0], int)
+    assert result["nested"][0] == 1
+    assert isinstance(result["nested"][1], float)
+    assert result["nested"][1] == 2.5
 
 
 class Status(Enum):
@@ -187,8 +230,6 @@ def test_from_dict_union_models_logic() -> None:
 
 
 def test_type_hints_caching() -> None:
-    from rxon.utils import _get_cached_type_hints
-
     hints1 = _get_cached_type_hints(Config)
     assert "points" in hints1
 

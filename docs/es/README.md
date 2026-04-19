@@ -1,53 +1,52 @@
 # Protocolo RXON (Reverse Axon)
 
-**ES** | [EN](https://github.com/madgagarin/rxon/blob/main/README.md) | [RU](https://github.com/madgagarin/rxon/blob/main/docs/ru/README.md)
+[EN](https://github.com/madgagarin/rxon/blob/main/README.md) | **ES** | [RU](https://github.com/madgagarin/rxon/blob/main/docs/ru/README.md)
 
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![PyPI version](https://img.shields.io/pypi/v/rxon.svg)](https://pypi.org/project/rxon/)
 
-**RXON** (Reverse Axon) es un protocolo de comunicación entre servicios ligero y extensible con conexión inversa, diseñado para arquitecturas **[HLN (Hierarchical Logic Network)](https://github.com/avtomatika-ai/hln)**.
+**RXON** (Reverse Axon) es un protocolo de conexión inversa ligero y extensible diseñado para arquitecturas **[HLN (Hierarchical Logic Network)](https://github.com/avtomatika-ai/hln)**.
 
-Sirve como el "sistema nervioso" para sistemas multi-agente distribuidos, proporcionando una base Zero Trust estrictamente tipada para la interacción entre holones.
+Sirve como el "sistema nervioso" para sistemas multi-agente distribuidos, proporcionando una base Zero Trust estrictamente tipificada para la comunicación entre servicios.
 
 ## 🚀 Concepto
 
-En las redes tradicionales, los comandos suelen fluir "de arriba hacia abajo" (modelo Push). En **RXON**, la iniciativa de conexión siempre proviene del nodo subordinado (Shell) al nodo superior (Orquestador). Esta arquitectura de "Axón Inverso" permite que los trabajadores operen detrás de NAT o Firewalls sin una configuración de red compleja, manteniendo un canal de control bidireccional seguro.
+En las redes tradicionales, los comandos suelen fluir "de arriba hacia abajo" (modelo Push). En **RXON**, la iniciativa de conexión siempre proviene del nodo subordinado (Shell) al nodo superior (Orchestrator). Esta arquitectura de "Axón Inverso" permite que los trabajadores operen detrás de NAT o Firewalls sin una configuración de red compleja, manteniendo un canal de control bidireccional seguro.
 
-## ✨ Características principales
+## ✨ Características Principales
 
--   **Conexión Inversa (PULL)**: Los nodos se conectan al orquestador para obtener tareas, lo que garantiza la compatibilidad con entornos de red complejos.
--   **Seguridad Zero Trust**: Soporte integrado para firmas digitales (`SecurityContext`) y cadenas de identidad. Todos los mensajes utilizan marcas de tiempo estrictamente enteras para estabilidad criptográfica.
--   **Agnóstico y extensible**: Los modelos principales son totalmente extensibles. `TaskResult` soporta `origin_worker_id` para una trazabilidad transparente en holarquías profundas.
+-   **Conexión Inversa (PULL)**: Los nodos se conectan al orquestador para obtener tareas, asegurando la compatibilidad con entornos de red complejos (NAT/Firewalls).
+-   **Seguridad Zero Trust**: Firma de carga útil a través de HMAC-SHA256 con verificación en tiempo constante. Soporte para cadenas de identidad y extracción de identidad de certificados mTLS.
+-   **Restauración Profunda de Modelos**: Utilidad `from_dict` robusta que restaura recursivamente tipos complejos de Python (`NamedTuple`, `dataclass`, `Enum`, `UUID`) a partir de diccionarios, soportando estructuras anidadas y tipos `Union`.
+-   **Serialización Segura**: Utilidad `to_dict` que elimina recursivamente los valores `None` para reducir el tamaño y normaliza los valores `float` (ej. `1.0` -> `1`), asegurando la estabilidad de los hashes criptográficos.
+-   **Validación Automatizada de Contratos**: Motor JSON Schema integrado que infiere automáticamente los esquemas a partir de los tipos de Python y valida los parámetros de `TaskPayload` contra los contratos de `SkillInfo`.
+-   **Coincidencia de Recursos Avanzada**: Lógica matemática para la asignación de recursos:
+    *   **Números**: Utiliza la lógica **GE (Greater or Equal)** (Requisito <= Disponible).
+    *   **Listas**: Utiliza la lógica de **Inclusión** (valor en la lista) o **Intersección** (cualquier elemento común).
+    *   **Cadenas**: Coincidencia parcial de modelos de hardware sin distinción de mayúsculas y minúsculas.
+-   **Telemetría Universal**: Los heartbeats incluyen métricas detalladas para cualquier dispositivo personalizado (sensores, GPUs, actuadores) y propiedades del sistema genéricas a través del modelo extensible `HardwareDevice`.
+-   **Transporte Resiliente**: Implementación HTTP/WebSocket con actualización automática de tokens (STS), backoff exponencial para reconexiones y cierre de sesión elegante.
 
--   **Telemetría Universal**: Los heartbeats incluyen métricas detalladas de CPU, RAM y cualquier dispositivo personalizado (sensores, GPUs, actuadores) a través del modelo extensible `HardwareDevice`.
--   **Sistema de Eventos Genérico**: Mecanismo unificado de señalización para actualizaciones de progreso, alertas personalizadas y disparadores en tiempo real con burbujeo jerárquico de eventos.
--   **Smart matching de recursos**: Lógica formalizada para requisitos de hardware utilizando la lógica **GE (Greater or Equal)** para números y coincidencia parcial para modelos.
--   **Almacenamiento Blob Enchufable**: Interfaz `BlobProvider` estandarizada para la descarga de datos pesados a través de S3, GCS o almacenamiento local.
--   **Fábrica Unificada**: Inicialización fácil del transporte mediante `create_transport` con soporte para esquemas `http://`, `https://`, `ws://` y `wss://`.
--   **Núcleo sin dependencias**: El núcleo del protocolo está escrito en Python 3.11+ puro. Los transportes estándar utilizan `aiohttp` y `orjson` para un rendimiento máximo.
+## 🏗 Arquitectura y Lógica
 
-## 🏗 Arquitectura
+### Validación y Normalización Interna
+La biblioteca garantiza la integridad de los datos en varios niveles:
+1.  **Estabilidad de Serialización**: Al firmar mensajes, RXON normaliza todos los tipos numéricos y ordena las claves de los diccionarios para asegurar que el mismo objeto siempre produzca el mismo hash HMAC.
+2.  **Protección de Recurrencia**: Todas las operaciones recursivas están limitadas a una profundidad de 100 para evitar el desbordamiento de pila o ataques DoS a través de datos maliciosos.
+3.  **Cumplimiento de Esquemas**: Antes de la ejecución de la tarea, la biblioteca valida los parámetros de entrada contra el JSON Schema de la habilidad, verificando los campos obligatorios, la corrección de tipos y los valores permitidos (Enums).
 
-El protocolo se divide en dos interfaces principales:
-
-1.  **Transport (lado del Worker)**: Para iniciar conexiones, recuperar tareas, emitir eventos y enviar resultados.
-2.  **Listener (lado del Orchestrator)**: Para aceptar conexiones entrantes y enrutar mensajes al motor de orquestación.
-
-### Lógica de Despacho Inteligente
-
+### Lógica de Coincidencia Inteligente (Smart Matching)
 RXON formaliza las reglas para emparejar tareas con holones:
-1.  **Coincidencia de Identidad**: Coincidencia directa por ID de dispositivo.
-2.  **Tipo y Modelo**: Coincidencia exacta por tipo, coincidencia parcial por cadena de modelo (insensible a mayúsculas).
-3.  **Coincidencia de Propiedades (Smart Comparison)**:
-    *   **Números**: Se verifica como **al menos** (Valor del Worker >= Requisito).
-    *   **Otros**: Se verifica como igualdad estricta.
+1.  **Coincidencia de Hardware**: Compara las propiedades de `HardwareDevice`. Si una tarea requiere `vram_gb: 16`, coincidirá con cualquier dispositivo con `vram_gb >= 16`.
+2.  **Propiedades de Recursos**: Los recursos genéricos (como la RAM o los núcleos de CPU) se comparan a través del diccionario `properties` utilizando la misma lógica GE.
+3.  **Intersección de Capacidades**: Si una tarea acepta múltiples entornos (ej. `["linux", "darwin"]`), un trabajador con `linux` coincidirá correctamente.
 
 ## 🛡️ Manejo de Errores
 
-RXON define un conjunto de códigos de error estandarizados para garantizar un comportamiento consistente en todas las implementaciones:
+RXON define un conjunto de códigos de error estandarizados para asegurar un comportamiento consistente:
 -   `CONTRACT_VIOLATION_ERROR`: Los datos no coinciden con el esquema negociado.
--   `SECURITY_ERROR`: Falló la autenticación o la verificación de firma.
+-   `SECURITY_ERROR`: Error de autenticación o verificación de firma.
 -   `RESOURCE_EXHAUSTED_ERROR`: Recursos físicos insuficientes (RAM, VRAM).
 -   `DEPENDENCY_ERROR`: Un servicio o artefacto requerido no está disponible.
 
@@ -60,14 +59,14 @@ from rxon.models import Resources, HardwareDevice
 # 1. Crear transporte (soporta http, https, ws, wss)
 transport = create_transport("ws://api.hln.local", "worker-01", "secret-token")
 
-# 2. Definir recursos del worker
+# 2. Definir recursos del trabajador (RAM y núcleos de CPU ahora en properties)
 my_res = Resources(
-    cpu_cores=8,
-    devices=[HardwareDevice(type="gpu", model="RTX 4090", properties={"memory_gb": 24})]
+    properties={"ram_gb": 64, "cpu_cores": 16},
+    devices=[HardwareDevice(type="gpu", model="RTX 4090", properties={"vram_gb": 24})]
 )
 
-# 3. Lógica de Smart Matching
-req = Resources(cpu_cores=4, devices=[HardwareDevice(type="gpu", properties={"memory_gb": 16})])
+# 3. Lógica de coincidencia (Requisito: GPU con al menos 16GB VRAM)
+req = Resources(devices=[HardwareDevice(type="gpu", properties={"vram_gb": 16})])
 if my_res.matches(req):
     print("¡Este holón está listo para la tarea!")
 ```
@@ -77,4 +76,4 @@ if my_res.matches(req):
 El proyecto se distribuye bajo la licencia Mozilla Public License 2.0 (MPL 2.0).
 
 ---
-*Mantra: "El RXON es el medio para el Ghost."*
+*Mantra: "The RXON is the medium for the Ghost."*

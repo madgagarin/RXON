@@ -12,11 +12,9 @@ from types import UnionType
 from typing import Any, Union, get_args, get_origin, get_type_hints
 from uuid import UUID
 
-
 def extract_json_schema(
     schema_type: Any, extractor: Callable[[Any], dict[str, Any] | None] | None = None
 ) -> dict[str, Any] | None:
-    """Helper to extract JSON schema from dict, Dataclass, NamedTuple, or primitives."""
     if schema_type is None:
         return None
     if isinstance(schema_type, dict):
@@ -64,18 +62,13 @@ def extract_json_schema(
     except Exception:
         return None
 
-
 def _is_optional(tp: Any) -> bool:
-    """Checks if a type is Optional[T] or T | None."""
     if isinstance(tp, UnionType):
         return type(None) in get_args(tp)
     origin = get_origin(tp)
     return origin is Union and type(None) in get_args(tp)
 
-
 def _python_type_to_json_schema(tp: Any) -> dict[str, Any]:
-    """Recursively converts Python types to JSON Schema fragments."""
-    # Special handling for Any (matches everything)
     if tp is Any:
         return {}
 
@@ -92,7 +85,6 @@ def _python_type_to_json_schema(tp: Any) -> dict[str, Any]:
     if tp in mapping:
         return {"type": mapping[tp]}
 
-    # Handle Enums
     if isinstance(tp, type) and issubclass(tp, Enum):
         return {"type": "string", "enum": [e.value for e in tp]}
 
@@ -118,9 +110,7 @@ def _python_type_to_json_schema(tp: Any) -> dict[str, Any]:
 
     return {"type": "string"}
 
-
 def validate_data(data: Any, schema: dict[str, Any] | None) -> tuple[bool, str | None]:
-    """Basic JSON Schema validation (types, required, properties, array items, anyOf, null)."""
     if schema is None or not schema:
         return True, None
 
@@ -133,7 +123,6 @@ def validate_data(data: Any, schema: dict[str, Any] | None) -> tuple[bool, str |
             errors.append(error)
         return False, f"Value does not match any schemas: {'; '.join(filter(None, errors))}"
 
-    # Handle enum validation
     if "enum" in schema:
         if data not in schema["enum"]:
             return False, f"Value '{data}' is not allowed. Must be one of: {schema['enum']}"
@@ -183,11 +172,9 @@ def validate_data(data: Any, schema: dict[str, Any] | None) -> tuple[bool, str |
 
     return True, None
 
-
 def extract_schema_from_func(
     func: Any, arg_name: str, extractor: Callable[[Any], dict[str, Any] | None] | None = None
 ) -> dict[str, Any] | None:
-    """Extracts JSON schema from a specific argument of a function."""
     try:
         hints = get_type_hints(func)
         param_hint = hints.get(arg_name)
@@ -197,11 +184,9 @@ def extract_schema_from_func(
         pass
     return None
 
-
 def extract_output_schema_from_func(
     func: Any, extractor: Callable[[Any], dict[str, Any] | None] | None = None
 ) -> dict[str, Any] | None:
-    """Extracts JSON schema from the return type of a function."""
     try:
         hints = get_type_hints(func)
         return_hint = hints.get("return")
@@ -212,7 +197,6 @@ def extract_output_schema_from_func(
     except Exception:
         pass
     return None
-
 
 def extract_skill_contract(
     blueprint: Any, extractor: Callable[[Any], dict[str, Any] | None] | None = None

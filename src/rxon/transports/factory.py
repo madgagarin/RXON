@@ -11,7 +11,6 @@ from rxon.testing import MockTransport
 from .base import Transport
 from .http import HttpTransport
 
-
 def create_transport(
     url: str, worker_id: str, token: str, ssl_context: SSLContext | None = None, **kwargs: Any
 ) -> Transport:

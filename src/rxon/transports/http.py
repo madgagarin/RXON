@@ -48,7 +48,6 @@ from .base import Transport
 
 logger = getLogger(__name__)
 
-
 class HttpTransport(Transport):
     """HTTP implementation of RXON Transport using aiohttp."""
 
@@ -79,6 +78,7 @@ class HttpTransport(Transport):
         self.result_retry_delay = result_retry_delay
         self._ws_connection = None
         self._version_warning_logged = False
+        self._closing = False
         self.extra_config = kwargs
 
     async def connect(self) -> None:
@@ -86,8 +86,10 @@ class HttpTransport(Transport):
             connector = TCPConnector(ssl=self.ssl_context) if self.ssl_context else None
             self._session = ClientSession(connector=connector, json_serialize=json_dumps)
             self._own_session = True
+        self._closing = False
 
     async def close(self) -> None:
+        self._closing = True
         if self._ws_connection and not self._ws_connection.closed:
             await self._ws_connection.close()
         if self._own_session and self._session and not self._session.closed:
@@ -224,26 +226,39 @@ class HttpTransport(Transport):
         except RxonError:
             return False
 
-    async def listen_for_commands(self) -> AsyncIterator[WorkerCommand]:
+    async def listen_for_commands(self, reconnect: bool = True) -> AsyncIterator[WorkerCommand]:
         if not self._session:
             return
         ws_url = f"{self.base_url.replace('http', 'ws', 1)}{WS_ENDPOINT}/{self.worker_id}"
-        try:
-            async with self._session.ws_connect(ws_url, headers=self._headers) as ws:
-                self._ws_connection = cast(Any, ws)
-                async for msg in ws:
-                    if msg.type == WSMsgType.TEXT:
-                        try:
-                            data = msg.json(loads=loads)
-                            yield from_dict(WorkerCommand, data)
-                        except Exception as e:
-                            logger.error(f"Failed to parse WebSocket command: {e}")
-                    elif msg.type == WSMsgType.ERROR:
-                        break
-        except Exception as e:
-            if not isinstance(e, RxonError):
-                logger.error(f"WebSocket connection error: {e}")
-                raise RxonError(f"WebSocket connection error: {e}") from e
-            raise
-        finally:
+        retry_delay = 1.0
+        max_delay = 60.0
+
+        while not self._closing and not self._session.closed:
+            try:
+                async with self._session.ws_connect(ws_url, headers=self._headers) as ws:
+                    self._ws_connection = cast(Any, ws)
+                    retry_delay = 1.0  # Reset delay on successful connection
+                    async for msg in ws:
+                        if msg.type == WSMsgType.TEXT:
+                            try:
+                                data = msg.json(loads=loads)
+                                yield from_dict(WorkerCommand, data)
+                            except Exception as e:
+                                logger.error(f"Failed to parse WebSocket command: {e}")
+                        elif msg.type in (WSMsgType.CLOSED, WSMsgType.CLOSE, WSMsgType.ERROR):
+                            break
+                        if self._closing:
+                            break
+            except (ClientError, RxonError) as e:
+                if not self._closing:
+                    logger.error(f"WebSocket connection error: {e}. Retrying in {retry_delay}s...")
+            except Exception as e:
+                if not self._closing:
+                    logger.exception(f"Unexpected WebSocket error: {e}. Retrying in {retry_delay}s...")
+
+            if self._closing or self._session.closed or not reconnect:
+                break
+
+            await sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, max_delay)
             self._ws_connection = None

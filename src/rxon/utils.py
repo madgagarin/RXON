@@ -9,7 +9,7 @@ from functools import lru_cache
 from hashlib import sha256
 from sys import modules
 from types import UnionType
-from typing import Any, Union, get_args, get_origin, get_type_hints
+from typing import Any, Union, cast, get_args, get_origin, get_type_hints
 from uuid import UUID
 
 from orjson import OPT_SORT_KEYS, dumps, loads
@@ -22,10 +22,8 @@ __all__ = [
     "calculate_dict_hash",
 ]
 
-
 @lru_cache(maxsize=128)
 def _get_cached_type_hints(cls: type) -> dict[str, Any]:
-    """Caches type hints for a class to avoid expensive reflection on every call."""
     try:
         module = modules.get(cls.__module__)
         globalns = module.__dict__ if module else None
@@ -33,9 +31,11 @@ def _get_cached_type_hints(cls: type) -> dict[str, Any]:
     except Exception:
         return {}
 
-
-def to_dict(obj: Any) -> Any:
+def to_dict(obj: Any, _depth: int = 0) -> Any:
     """Recursively converts Models, Enums and UUIDs to dicts for JSON serialization. Strips None values."""
+    if _depth > 100:
+        raise RecursionError("Maximum recursion depth (100) exceeded in to_dict")
+
     if isinstance(obj, Enum):
         return obj.value
 
@@ -43,17 +43,21 @@ def to_dict(obj: Any) -> Any:
         return str(obj)
 
     if hasattr(obj, "_asdict"):
-        return {k: to_dict(v) for k, v in obj._asdict().items() if v is not None}
+        return {k: to_dict(v, _depth + 1) for k, v in obj._asdict().items() if v is not None}
 
     if hasattr(obj, "__dataclass_fields__"):
-        return {f.name: to_dict(getattr(obj, f.name)) for f in fields(obj) if getattr(obj, f.name) is not None}
+        return {
+            f.name: to_dict(getattr(obj, f.name), _depth + 1) for f in fields(obj) if getattr(obj, f.name) is not None
+        }
+
+    if isinstance(obj, float) and obj.is_integer():
+        return int(obj)
 
     if isinstance(obj, (list, tuple)):
-        return [to_dict(i) for i in obj if i is not None]
+        return [to_dict(i, _depth + 1) for i in obj if i is not None]
     if isinstance(obj, dict):
-        return {k: to_dict(v) for k, v in obj.items() if v is not None}
+        return {k: to_dict(v, _depth + 1) for k, v in obj.items() if v is not None}
     return obj
-
 
 def from_dict(cls: type, data: Any) -> Any:
     """Deeply restores Models from dictionaries using type hints."""
@@ -81,9 +85,7 @@ def from_dict(cls: type, data: Any) -> Any:
     except TypeError as e:
         raise ValueError(f"Failed to instantiate {cls.__name__}: {e}") from e
 
-
 def _restore_field(field_type: Any, val: Any) -> Any:
-    """Helper to recursively restore a single field based on its type hint."""
     if val is None:
         return None
 
@@ -126,12 +128,12 @@ def _restore_field(field_type: Any, val: Any) -> Any:
 
     return val
 
-
 def json_dumps(obj: Any) -> str:
     """Wrapper for orjson.dumps returning str."""
-    return dumps(to_dict(obj)).decode("utf-8")
-
+    return cast(str, dumps(to_dict(obj)).decode("utf-8"))
 
 def calculate_dict_hash(obj: Any) -> str:
     """Generates a stable SHA256 hash of an object."""
-    return sha256(dumps(to_dict(obj), option=OPT_SORT_KEYS)).hexdigest()
+    message = cast(bytes, dumps(to_dict(obj), option=OPT_SORT_KEYS))
+    h: str = sha256(message).hexdigest()
+    return h

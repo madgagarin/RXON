@@ -21,7 +21,6 @@ __all__ = [
     "verify_signature",
 ]
 
-
 def sign_payload(payload: Any, secret: str, ignore_fields: list[str] | None = None) -> str:
     """
     Signs a payload using HMAC SHA256.
@@ -43,14 +42,12 @@ def sign_payload(payload: Any, secret: str, ignore_fields: list[str] | None = No
     message = orjson.dumps(data, option=orjson.OPT_SORT_KEYS)
     return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
 
-
 def verify_signature(payload: Any, signature: str, secret: str, ignore_fields: list[str] | None = None) -> bool:
     """Verifies the HMAC SHA256 signature of a payload using constant-time comparison."""
     if not signature or not secret:
         return False
     expected_signature = sign_payload(payload, secret, ignore_fields=ignore_fields)
     return hmac.compare_digest(expected_signature, signature)
-
 
 def create_server_ssl_context(
     cert_path: str | Path,
@@ -79,7 +76,6 @@ def create_server_ssl_context(
 
     return context
 
-
 def create_client_ssl_context(
     ca_path: str | Path | None = None,
     cert_path: str | Path | None = None,
@@ -101,7 +97,6 @@ def create_client_ssl_context(
         context.load_cert_chain(certfile=str(cert_path), keyfile=str(key_path))
 
     return context
-
 
 def extract_cert_identity(request: Any) -> str | None:
     """

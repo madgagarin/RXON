@@ -19,7 +19,6 @@ from rxon.models import (
 from rxon.transports.base import Transport
 from rxon.utils import from_dict
 
-
 class MockTransport(Transport):
     """
     In-memory mock transport for testing Workers without a real Orchestrator.
@@ -74,7 +73,7 @@ class MockTransport(Transport):
         self.emitted_events.append(event)
         return True
 
-    async def listen_for_commands(self) -> AsyncIterator[WorkerCommand]:
+    async def listen_for_commands(self, reconnect: bool = True) -> AsyncIterator[WorkerCommand]:
         while self.connected:
             item = await self.command_queue.get()
             if isinstance(item, dict):

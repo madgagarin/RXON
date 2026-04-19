@@ -27,7 +27,6 @@ from .base import Listener
 
 T = TypeVar("T")
 
-
 class HttpListener(Listener):
     """
     HTTP implementation of RXON Listener using aiohttp.
