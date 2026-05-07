@@ -28,6 +28,7 @@ __all__ = [
     "Heartbeat",
 ]
 
+
 class HardwareDevice(NamedTuple):
     type: str
     model: str | None = None
@@ -71,15 +72,18 @@ class HardwareDevice(NamedTuple):
                 return False
         return True
 
+
 class DeviceUsage(NamedTuple):
     unit_id: str
     load_percent: float
     metrics: dict[str, Any] | None = None
 
+
 class ResourcesUsage(NamedTuple):
     cpu_load_percent: float = 0.0
     ram_used_gb: float = 0.0
     devices_usage: list[DeviceUsage] | None = None
+
 
 class Resources(NamedTuple):
     devices: list["HardwareDevice"] | None = None
@@ -121,6 +125,7 @@ class Resources(NamedTuple):
                     return False
         return True
 
+
 class InstalledArtifact(NamedTuple):
     name: str
     version: str = "unknown"
@@ -158,6 +163,7 @@ class InstalledArtifact(NamedTuple):
                 return False
         return True
 
+
 @dataclass(frozen=True, slots=True)
 class SkillInfo:
     name: str
@@ -186,6 +192,7 @@ class SkillInfo:
             return NotImplemented
         return self.name < other.name
 
+
 class SecurityContext(NamedTuple):
     """Security metadata for Zero Trust identity and verification."""
 
@@ -194,6 +201,7 @@ class SecurityContext(NamedTuple):
     identity_chain: list[str] | None = None
     metadata: dict[str, Any] | None = None
 
+
 class WorkerCapabilities(NamedTuple):
     hostname: str = "unknown"
     ip_address: str = "0.0.0.0"
@@ -201,11 +209,13 @@ class WorkerCapabilities(NamedTuple):
     s3_config_hash: str | None = None
     extra: dict[str, Any] | None = None
 
+
 class FileMetadata(NamedTuple):
     uri: str
     size: int = 0
     etag: str | None = None
     metadata: dict[str, Any] | None = None
+
 
 class WorkerRegistration(NamedTuple):
     worker_id: str
@@ -222,11 +232,13 @@ class WorkerRegistration(NamedTuple):
     metadata: dict[str, Any] | None = None
     timestamp: int | None = None
 
+
 class TokenResponse(NamedTuple):
     access_token: str
     expires_in: int
     worker_id: str
     metadata: dict[str, Any] | None = None
+
 
 class WorkerEventPayload(NamedTuple):
     event_id: str
@@ -244,12 +256,14 @@ class WorkerEventPayload(NamedTuple):
     security: SecurityContext | None = None
     metadata: dict[str, Any] | None = None
 
+
 class WorkerCommand(NamedTuple):
     command: str
     task_id: str | None = None
     job_id: str | None = None
     params: dict[str, Any] | None = None
     metadata: dict[str, Any] | None = None
+
 
 class TaskPayload(NamedTuple):
     job_id: str
@@ -274,10 +288,12 @@ class TaskPayload(NamedTuple):
 
         return validate_data(self.params, skill.input_schema)
 
+
 class TaskError(NamedTuple):
     code: str
     message: str
     details: dict[str, Any] | None = None
+
 
 class TaskResult(NamedTuple):
     job_id: str
@@ -291,6 +307,7 @@ class TaskResult(NamedTuple):
     security: SecurityContext | None = None
     metadata: dict[str, Any] | None = None
     timestamp: int | None = None
+
 
 class Heartbeat(NamedTuple):
     worker_id: str

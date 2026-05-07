@@ -25,8 +25,8 @@ En las redes tradicionales, los comandos suelen fluir "de arriba hacia abajo" (m
     *   **Números**: Utiliza la lógica **GE (Greater or Equal)** (Requisito <= Disponible).
     *   **Listas**: Utiliza la lógica de **Inclusión** (valor en la lista) o **Intersección** (cualquier elemento común).
     *   **Cadenas**: Coincidencia parcial de modelos de hardware sin distinción de mayúsculas y minúsculas.
--   **Telemetría Universal**: Los heartbeats incluyen métricas detalladas para cualquier dispositivo personalizado (sensores, GPUs, actuadores) y propiedades del sistema genéricas a través del modelo extensible `HardwareDevice`.
--   **Transporte Resiliente**: Implementación HTTP/WebSocket con actualización automática de tokens (STS), backoff exponencial para reconexiones y cierre de sesión elegante.
+-   **Telemetría Universal**: Los heartbeats include métricas detalladas para cualquier dispositivo personalizado (sensores, GPUs, actuadores) y propiedades del sistema genéricas a través del modelo extensible `HardwareDevice`.
+-   **Transporte Resiliente**: Implementación HTTP/WebSocket con actualización automática de tokens (STS), backoff exponencial para reconexiones, cierre de sesión elegante y manejo nativo de **Rate Limit (HTTP 429)** con soporte para `Retry-After`.
 
 ## 🏗 Arquitectura y Lógica
 

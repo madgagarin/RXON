@@ -20,12 +20,14 @@ from rxon.constants import (
     STS_TOKEN_ENDPOINT,
     WS_ENDPOINT,
 )
+from rxon.exceptions import RxonRateLimitError
 from rxon.security import extract_cert_identity
 from rxon.utils import json_dumps, loads, to_dict
 
 from .base import Listener
 
 T = TypeVar("T")
+
 
 class HttpListener(Listener):
     """
@@ -103,6 +105,8 @@ class HttpListener(Listener):
             return self._json_response({"error": e.text or str(e)}, status=e.status)
         except PermissionError as e:
             return self._json_response({"error": str(e)}, status=403)
+        except RxonRateLimitError as e:
+            return self._json_response({"error": str(e), "code": e.details.get("code")}, status=429)
         except ValueError as e:
             return self._json_response({"error": str(e)}, status=400)
         except Exception as e:
@@ -127,6 +131,8 @@ class HttpListener(Listener):
             return self._json_response({"error": e.text or str(e)}, status=e.status)
         except PermissionError as e:
             return self._json_response({"error": str(e)}, status=403)
+        except RxonRateLimitError as e:
+            return self._json_response({"error": str(e), "code": e.details.get("code")}, status=429)
         except ValueError as e:
             return self._json_response({"error": str(e)}, status=400)
         except Exception as e:
@@ -146,6 +152,8 @@ class HttpListener(Listener):
             return self._json_response({"error": e.text or str(e)}, status=e.status)
         except PermissionError as e:
             return self._json_response({"error": str(e)}, status=403)
+        except RxonRateLimitError as e:
+            return self._json_response({"error": str(e), "code": e.details.get("code")}, status=429)
         except ValueError as e:
             return self._json_response({"error": str(e)}, status=400)
         except Exception as e:
@@ -170,6 +178,8 @@ class HttpListener(Listener):
             return self._json_response({"error": e.text or str(e)}, status=e.status)
         except PermissionError as e:
             return self._json_response({"error": str(e)}, status=403)
+        except RxonRateLimitError as e:
+            return self._json_response({"error": str(e), "code": e.details.get("code")}, status=429)
         except ValueError as e:
             return self._json_response({"error": str(e)}, status=400)
         except Exception as e:
@@ -189,6 +199,8 @@ class HttpListener(Listener):
             return self._json_response({"error": e.text or str(e)}, status=e.status)
         except PermissionError as e:
             return self._json_response({"error": str(e)}, status=403)
+        except RxonRateLimitError as e:
+            return self._json_response({"error": str(e), "code": e.details.get("code")}, status=429)
         except ValueError as e:
             return self._json_response({"error": str(e)}, status=400)
         except Exception as e:
@@ -205,6 +217,8 @@ class HttpListener(Listener):
             return self._json_response({"error": e.text or str(e)}, status=e.status)
         except PermissionError as e:
             return self._json_response({"error": str(e)}, status=403)
+        except RxonRateLimitError as e:
+            return self._json_response({"error": str(e), "code": e.details.get("code")}, status=429)
         except ValueError as e:
             return self._json_response({"error": str(e)}, status=400)
         except Exception as e:
@@ -216,7 +230,7 @@ class HttpListener(Listener):
         if worker_id:
             context["worker_id_hint"] = worker_id
 
-        # Performing auth before handshake (breaking change but cleaner architecture)
+        # Auth before handshake
         if self.handler:
             try:
                 await self.handler("websocket_auth", None, context)

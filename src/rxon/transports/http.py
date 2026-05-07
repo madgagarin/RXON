@@ -1,8 +1,10 @@
+import datetime
+import email.utils
+
 # Copyright (c) 2025-2026 Dmitrii Gagarin aka madgagarin
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
 from asyncio import sleep
 from collections.abc import AsyncIterator
 from logging import getLogger
@@ -32,7 +34,7 @@ from rxon.constants import (
     STS_TOKEN_ENDPOINT,
     WS_ENDPOINT,
 )
-from rxon.exceptions import RxonAuthError, RxonError, RxonNetworkError, RxonProtocolError
+from rxon.exceptions import RxonAuthError, RxonError, RxonNetworkError, RxonProtocolError, RxonRateLimitError
 from rxon.models import (
     Heartbeat,
     TaskPayload,
@@ -47,6 +49,7 @@ from rxon.utils import from_dict, json_dumps, loads, to_dict
 from .base import Transport
 
 logger = getLogger(__name__)
+
 
 class HttpTransport(Transport):
     """HTTP implementation of RXON Transport using aiohttp."""
@@ -127,6 +130,35 @@ class HttpTransport(Transport):
                             headers = self._headers.copy()
                             continue
                         raise RxonAuthError(f"Unauthorized (401) from {endpoint}")
+
+                    if resp.status == 429:
+                        retry_after = resp.headers.get("Retry-After")
+                        retry_seconds = None
+                        if retry_after:
+                            try:
+                                retry_seconds = float(retry_after)
+                            except ValueError:
+                                try:
+                                    dt = email.utils.parsedate_to_datetime(retry_after)
+                                    retry_seconds = (dt - datetime.datetime.now(datetime.UTC)).total_seconds()
+                                except Exception:
+                                    pass
+
+                        try:
+                            data = await resp.json(loads=loads)
+                            details: dict[str, Any] = {"status": 429}
+                            if retry_seconds is not None:
+                                details["retry_after"] = max(0.0, retry_seconds)
+                            if isinstance(data, dict) and "code" in data:
+                                details["code"] = data["code"]
+                            error_msg = data.get("error") if isinstance(data, dict) else await resp.text()
+                            raise RxonRateLimitError(error_msg or "Rate limit exceeded", details=details)
+                        except (ContentTypeError, ValueError):
+                            text = await resp.text()
+                            details = {"status": resp.status}
+                            if retry_seconds is not None:
+                                details["retry_after"] = max(0.0, retry_seconds)
+                            raise RxonRateLimitError(f"Rate limit exceeded (429): {text}", details=details)
 
                     if resp.status >= 400:
                         text = await resp.text()

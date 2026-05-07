@@ -19,6 +19,7 @@ from rxon.models import (
 from rxon.transports.base import Transport
 from rxon.utils import from_dict
 
+
 class MockTransport(Transport):
     """
     In-memory mock transport for testing Workers without a real Orchestrator.

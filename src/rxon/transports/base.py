@@ -17,6 +17,7 @@ from rxon.models import (
     WorkerRegistration,
 )
 
+
 class Transport(ABC):
     """
     Abstract base class for RXON Worker-side Transports.
@@ -71,6 +72,7 @@ class Transport(ABC):
     async def refresh_token(self) -> TokenResponse | None:
         """Request a new access token using STS."""
         pass
+
 
 class Listener(ABC):
     """

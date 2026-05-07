@@ -4,6 +4,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import asyncio
+import datetime
 import socket
 from logging import WARNING
 from typing import Any, cast
@@ -15,12 +16,13 @@ from aiohttp import ClientSession, WSMsgType, web
 from rxon import HttpListener, create_transport
 from rxon.constants import (
     ENDPOINT_WORKER_REGISTER,
+    ERROR_CODE_LIMIT_EXCEEDED,
     EVENT_TYPE_PROGRESS,
     IGNORED_REASON_LATE,
     PROTOCOL_VERSION_HEADER,
     WS_ENDPOINT,
 )
-from rxon.exceptions import RxonAuthError, RxonProtocolError
+from rxon.exceptions import RxonAuthError, RxonProtocolError, RxonRateLimitError
 from rxon.models import (
     DeviceUsage,
     Heartbeat,
@@ -489,5 +491,141 @@ async def test_send_result_mismatch_ignored(server: tuple[str, dict[str, Any], H
         res = TaskResult("job-wrong", "task-wrong", "worker-mismatch", "success")
         success = await transport.send_result(res)
         assert success is False
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_error(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    base_url, _, listener = server
+
+    async def rate_limit_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        raise RxonRateLimitError("Too many heartbeats")
+
+    listener.handler = rate_limit_handler
+    transport = create_transport(base_url, "worker-ratelimit", "token")
+    await transport.connect()
+
+    try:
+        with pytest.raises(RxonRateLimitError) as exc_info:
+            await transport.send_heartbeat(Heartbeat("worker-ratelimit", "idle"))
+
+        assert exc_info.value.details["status"] == 429
+        assert "Too many heartbeats" in str(exc_info.value)
+
+        assert exc_info.value.details["code"] == ERROR_CODE_LIMIT_EXCEEDED
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_during_poll(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    base_url, _, listener = server
+
+    async def poll_limit_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        if msg_type == "poll":
+            raise RxonRateLimitError("Polling too fast")
+        return {}
+
+    listener.handler = poll_limit_handler
+    transport = create_transport(base_url, "worker-poll-limit", "token")
+    await transport.connect()
+
+    try:
+        with pytest.raises(RxonRateLimitError) as exc_info:
+            await transport.poll_task(timeout=1.0)
+        assert "Polling too fast" in str(exc_info.value)
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_during_send_result(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    base_url, _, listener = server
+    call_count = 0
+
+    async def result_limit_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        nonlocal call_count
+        if msg_type == "result":
+            call_count += 1
+            raise RxonRateLimitError("Result submission limited")
+        return {}
+
+    listener.handler = result_limit_handler
+    transport = create_transport(base_url, "worker-res-limit", "token")
+    await transport.connect()
+
+    try:
+        res = TaskResult("job-1", "task-1", "worker-res-limit", "success")
+        # Ensure it raises immediately and doesn't retry like network errors
+        with pytest.raises(RxonRateLimitError):
+            await transport.send_result(res)
+
+        assert call_count == 1  # No retries for 429
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_custom_code(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    base_url, _, listener = server
+
+    async def custom_code_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        # Simulate custom limit code (e.g. per-skill limit)
+        raise RxonRateLimitError("Skill limit exceeded", details={"code": "SKILL_QUOTA_EXCEEDED"})
+
+    listener.handler = custom_code_handler
+    transport = create_transport(base_url, "worker-custom-limit", "token")
+    await transport.connect()
+
+    try:
+        with pytest.raises(RxonRateLimitError) as exc_info:
+            await transport.send_heartbeat(Heartbeat("worker-custom-limit", "idle"))
+
+        assert exc_info.value.details["code"] == "SKILL_QUOTA_EXCEEDED"
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_retry_after_seconds(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    base_url, _, listener = server
+
+    async def retry_after_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        return web.json_response({"error": "Too busy", "code": "BUSY"}, status=429, headers={"Retry-After": "120"})
+
+    listener.handler = retry_after_handler
+    transport = create_transport(base_url, "retry-sec", "token")
+    await transport.connect()
+
+    try:
+        with pytest.raises(RxonRateLimitError) as exc_info:
+            await transport.send_heartbeat(Heartbeat("retry-sec", "idle"))
+
+        assert exc_info.value.details["retry_after"] == 120.0
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_retry_after_date(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    base_url, _, listener = server
+
+    future_date = datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=1)
+    date_str = future_date.strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+    async def retry_date_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        return web.json_response({"error": "Maintenance"}, status=429, headers={"Retry-After": date_str})
+
+    listener.handler = retry_date_handler
+    transport = create_transport(base_url, "retry-date", "token")
+    await transport.connect()
+
+    try:
+        with pytest.raises(RxonRateLimitError) as exc_info:
+            await transport.send_heartbeat(Heartbeat("retry-date", "idle"))
+
+        val = exc_info.value.details["retry_after"]
+        assert 3500 < val < 3700
     finally:
         await transport.close()

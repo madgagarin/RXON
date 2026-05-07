@@ -9,7 +9,7 @@ from functools import lru_cache
 from hashlib import sha256
 from sys import modules
 from types import UnionType
-from typing import Any, Union, cast, get_args, get_origin, get_type_hints
+from typing import Any, Union, get_args, get_origin, get_type_hints
 from uuid import UUID
 
 from orjson import OPT_SORT_KEYS, dumps, loads
@@ -22,6 +22,7 @@ __all__ = [
     "calculate_dict_hash",
 ]
 
+
 @lru_cache(maxsize=128)
 def _get_cached_type_hints(cls: type) -> dict[str, Any]:
     try:
@@ -30,6 +31,7 @@ def _get_cached_type_hints(cls: type) -> dict[str, Any]:
         return get_type_hints(cls, globalns=globalns)
     except Exception:
         return {}
+
 
 def to_dict(obj: Any, _depth: int = 0) -> Any:
     """Recursively converts Models, Enums and UUIDs to dicts for JSON serialization. Strips None values."""
@@ -59,6 +61,7 @@ def to_dict(obj: Any, _depth: int = 0) -> Any:
         return {k: to_dict(v, _depth + 1) for k, v in obj.items() if v is not None}
     return obj
 
+
 def from_dict(cls: type, data: Any) -> Any:
     """Deeply restores Models from dictionaries using type hints."""
     if data is None or isinstance(data, cls) or not isinstance(data, dict):
@@ -84,6 +87,7 @@ def from_dict(cls: type, data: Any) -> Any:
         return cls(**processed_data)
     except TypeError as e:
         raise ValueError(f"Failed to instantiate {cls.__name__}: {e}") from e
+
 
 def _restore_field(field_type: Any, val: Any) -> Any:
     if val is None:
@@ -128,12 +132,14 @@ def _restore_field(field_type: Any, val: Any) -> Any:
 
     return val
 
+
 def json_dumps(obj: Any) -> str:
     """Wrapper for orjson.dumps returning str."""
-    return cast(str, dumps(to_dict(obj)).decode("utf-8"))
+    return dumps(to_dict(obj)).decode("utf-8")
+
 
 def calculate_dict_hash(obj: Any) -> str:
     """Generates a stable SHA256 hash of an object."""
-    message = cast(bytes, dumps(to_dict(obj), option=OPT_SORT_KEYS))
+    message = dumps(to_dict(obj), option=OPT_SORT_KEYS)
     h: str = sha256(message).hexdigest()
     return h

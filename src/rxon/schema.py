@@ -12,6 +12,7 @@ from types import UnionType
 from typing import Any, Union, get_args, get_origin, get_type_hints
 from uuid import UUID
 
+
 def extract_json_schema(
     schema_type: Any, extractor: Callable[[Any], dict[str, Any] | None] | None = None
 ) -> dict[str, Any] | None:
@@ -62,11 +63,13 @@ def extract_json_schema(
     except Exception:
         return None
 
+
 def _is_optional(tp: Any) -> bool:
     if isinstance(tp, UnionType):
         return type(None) in get_args(tp)
     origin = get_origin(tp)
     return origin is Union and type(None) in get_args(tp)
+
 
 def _python_type_to_json_schema(tp: Any) -> dict[str, Any]:
     if tp is Any:
@@ -109,6 +112,7 @@ def _python_type_to_json_schema(tp: Any) -> dict[str, Any]:
         return nested if nested else {"type": "object"}
 
     return {"type": "string"}
+
 
 def validate_data(data: Any, schema: dict[str, Any] | None) -> tuple[bool, str | None]:
     if schema is None or not schema:
@@ -172,6 +176,7 @@ def validate_data(data: Any, schema: dict[str, Any] | None) -> tuple[bool, str |
 
     return True, None
 
+
 def extract_schema_from_func(
     func: Any, arg_name: str, extractor: Callable[[Any], dict[str, Any] | None] | None = None
 ) -> dict[str, Any] | None:
@@ -183,6 +188,7 @@ def extract_schema_from_func(
     except Exception:
         pass
     return None
+
 
 def extract_output_schema_from_func(
     func: Any, extractor: Callable[[Any], dict[str, Any] | None] | None = None
@@ -197,6 +203,7 @@ def extract_output_schema_from_func(
     except Exception:
         pass
     return None
+
 
 def extract_skill_contract(
     blueprint: Any, extractor: Callable[[Any], dict[str, Any] | None] | None = None

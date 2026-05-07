@@ -20,6 +20,7 @@ __all__ = [
 
 RXON_BLOB_SCHEME = "s3"
 
+
 class BlobProvider(ABC):
     """
     Abstract interface for Blob Storage providers (S3, GCS, Local).
@@ -51,6 +52,7 @@ class BlobProvider(ABC):
         """Deletes all objects under a specific URI prefix."""
         pass
 
+
 def calculate_config_hash(endpoint: str | None, access_key: str | None, bucket: str | None) -> str | None:
     """
     Calculates a consistent hash of the Blob/S3 configuration.
@@ -62,6 +64,7 @@ def calculate_config_hash(endpoint: str | None, access_key: str | None, bucket: 
 
     config_str = f"{endpoint}|{access_key}|{bucket}"
     return sha256(config_str.encode()).hexdigest()[:16]
+
 
 def parse_uri(uri: str, default_bucket: str | None = None, prefix: str = "") -> tuple[str, str, bool]:
     """

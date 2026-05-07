@@ -52,12 +52,12 @@ def test_task_payload_validation_advanced() -> None:
     # Invalid: type mismatch (float instead of int)
     is_valid, err = TaskPayload("j", "t", "p", {"count": 1.5}).validate_params(skill)
     assert is_valid is False
-    assert "Expected integer" in err
+    assert err is not None and "Expected integer" in err
 
     # Invalid: array item type mismatch
     is_valid, err = TaskPayload("j", "t", "p", {"count": 5, "tags": [1, "2"]}).validate_params(skill)
     assert is_valid is False
-    assert "Expected string" in err
+    assert err is not None and "Expected string" in err
 
     # Invalid: params=None for object schema
     skill_optional = SkillInfo(name="opt", input_schema={"type": "object"})
@@ -72,7 +72,7 @@ def test_task_payload_validation_no_params() -> None:
 
     is_valid, err = task.validate_params(skill)
     assert is_valid is False
-    assert "Expected object, got null" in err
+    assert err is not None and "Expected object, got null" in err
 
 
 def test_worker_event_traceability() -> None:

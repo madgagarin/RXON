@@ -25,8 +25,9 @@ In traditional networks, commands usually flow "top-down" (Push model). In **RXO
     *   **Numbers**: Uses **GE (Greater or Equal)** logic (Requirement <= Available).
     *   **Lists**: Uses **Inclusion** (val in list) or **Intersection** (any common element).
     *   **Strings**: Case-insensitive partial matching for hardware models.
--   **Unified Telemetry**: Heartbeats include granular metrics for any custom devices (Sensors, GPUs, Actuators) and generic system properties via the extensible `HardwareDevice` model.
--   **Resilient Transport**: HTTP/WebSocket implementation with automatic token refresh (STS), exponential backoff for reconnections, and graceful session closing.
+- **Unified Telemetry**: Heartbeats include granular metrics for any custom devices (Sensors, GPUs, Actuators) and generic system properties via the extensible `HardwareDevice` model.
+-   **Resilient Transport**: HTTP/WebSocket implementation with automatic token refresh (STS), exponential backoff for reconnections, graceful session closing, and built-in **Rate Limit (HTTP 429)** handling with `Retry-After` support.
+
 
 ## 🏗 Architecture & Logic
 
