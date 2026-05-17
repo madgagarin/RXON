@@ -1,12 +1,11 @@
-import datetime
-import email.utils
-
 # Copyright (c) 2025-2026 Dmitrii Gagarin aka madgagarin
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 from asyncio import sleep
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from logging import getLogger
 from ssl import SSLContext
 from typing import Any, cast
@@ -139,8 +138,8 @@ class HttpTransport(Transport):
                                 retry_seconds = float(retry_after)
                             except ValueError:
                                 try:
-                                    dt = email.utils.parsedate_to_datetime(retry_after)
-                                    retry_seconds = (dt - datetime.datetime.now(datetime.UTC)).total_seconds()
+                                    dt = parsedate_to_datetime(retry_after)
+                                    retry_seconds = (dt - datetime.now(UTC)).total_seconds()
                                 except Exception:
                                     pass
 
@@ -294,3 +293,7 @@ class HttpTransport(Transport):
             await sleep(retry_delay)
             retry_delay = min(retry_delay * 2, max_delay)
             self._ws_connection = None
+
+
+tion = None
+on = None

@@ -4,6 +4,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 from dataclasses import fields, is_dataclass
+from datetime import datetime
 from enum import Enum
 from functools import lru_cache
 from hashlib import sha256
@@ -12,7 +13,7 @@ from types import UnionType
 from typing import Any, Union, get_args, get_origin, get_type_hints
 from uuid import UUID
 
-from orjson import OPT_SORT_KEYS, dumps, loads
+from orjson import OPT_NON_STR_KEYS, OPT_SORT_KEYS, dumps, loads
 
 __all__ = [
     "to_dict",
@@ -34,32 +35,54 @@ def _get_cached_type_hints(cls: type) -> dict[str, Any]:
 
 
 def to_dict(obj: Any, _depth: int = 0) -> Any:
-    """Recursively converts Models, Enums and UUIDs to dicts for JSON serialization. Strips None values."""
+    """
+    Converts any object to a JSON-serializable dictionary/list/scalar.
+    Uses orjson round-trip to ensure consistency between signing and verification.
+    """
     if _depth > 100:
         raise RecursionError("Maximum recursion depth (100) exceeded in to_dict")
 
-    if isinstance(obj, Enum):
-        return obj.value
+    if obj is None:
+        return None
 
-    if isinstance(obj, UUID):
-        return str(obj)
+    def default_handler(o: Any) -> Any:
+        if hasattr(o, "_asdict"):
+            return {k: v for k, v in o._asdict().items() if v is not None}
+        if hasattr(o, "model_dump") and callable(o.model_dump):
+            return {k: v for k, v in o.model_dump().items() if v is not None}
+        if hasattr(o, "dict") and callable(o.dict):
+            return {k: v for k, v in o.dict().items() if v is not None}
+        if isinstance(o, Enum):
+            return o.value
+        if isinstance(o, (UUID, datetime)):
+            return str(o)
+        if hasattr(o, "__dataclass_fields__"):
+            return {f.name: getattr(o, f.name) for f in fields(o) if getattr(o, f.name) is not None}
+        return str(o)
 
-    if hasattr(obj, "_asdict"):
-        return {k: to_dict(v, _depth + 1) for k, v in obj._asdict().items() if v is not None}
+    try:
+        # Round-trip through JSON ensures stable sorting and normalization for signing
+        json_bytes = dumps(obj, default=default_handler, option=OPT_SORT_KEYS | OPT_NON_STR_KEYS)
+    except TypeError as e:
+        if "Recursion limit reached" in str(e):
+            raise RecursionError("Maximum recursion depth (100) exceeded in to_dict") from e
+        raise e
+    normalized = loads(json_bytes)
 
-    if hasattr(obj, "__dataclass_fields__"):
-        return {
-            f.name: to_dict(getattr(obj, f.name), _depth + 1) for f in fields(obj) if getattr(obj, f.name) is not None
-        }
+    return _finalize_structure(normalized, _depth)
 
-    if isinstance(obj, float) and obj.is_integer():
-        return int(obj)
 
-    if isinstance(obj, (list, tuple)):
-        return [to_dict(i, _depth + 1) for i in obj if i is not None]
-    if isinstance(obj, dict):
-        return {k: to_dict(v, _depth + 1) for k, v in obj.items() if v is not None}
-    return obj
+def _finalize_structure(data: Any, _depth: int = 0) -> Any:
+    """Recursively removes None values and normalizes floats to ints."""
+    if _depth > 100:
+        raise RecursionError("Maximum recursion depth (100) exceeded in to_dict")
+    if isinstance(data, dict):
+        return {str(k): _finalize_structure(v, _depth + 1) for k, v in data.items() if v is not None}
+    if isinstance(data, list):
+        return [_finalize_structure(i, _depth + 1) for i in data]
+    if isinstance(data, float) and data.is_integer():
+        return int(data)
+    return data
 
 
 def from_dict(cls: type, data: Any) -> Any:
@@ -127,6 +150,12 @@ def _restore_field(field_type: Any, val: Any) -> Any:
     if field_type is UUID and isinstance(val, str):
         try:
             return UUID(val)
+        except ValueError:
+            return val
+
+    if field_type is datetime and isinstance(val, str):
+        try:
+            return datetime.fromisoformat(val)
         except ValueError:
             return val
 

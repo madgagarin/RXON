@@ -33,9 +33,10 @@ In traditional networks, commands usually flow "top-down" (Push model). In **RXO
 
 ### Internal Validation & Normalization
 The library ensures data integrity at several layers:
-1.  **Serialization Stability**: When signing messages, RXON normalizes all numeric types and sorts dictionary keys to ensure the same object always produces the same HMAC hash regardless of minor formatting differences.
-2.  **Recursion Protection**: All recursive operations are limited to a depth of 100 to prevent stack overflow or DoS attacks via malicious payloads.
-3.  **Schema Enforcement**: Before task execution, the library validates input parameters against the skill's JSON Schema, checking for required fields, type correctness, and allowed enum values.
+1.  **Serialization Stability**: RXON uses a **JSON Round-trip** mechanism with `orjson` to normalize all numeric types (`10.0` -> `10`), coerce dictionary keys to strings, and sort keys. This ensures that the same object always produces the exact same HMAC hash regardless of minor formatting differences.
+2.  **Full Type Support**: Native support for `datetime`, `UUID`, `Enum`, and **Pydantic** models ensures seamless integration with modern Python ecosystems while maintaining cryptographic consistency.
+3.  **Recursion Protection**: All recursive operations are limited to a depth of 100 to prevent stack overflow or DoS attacks via malicious payloads.
+4.  **Schema Enforcement**: Before task execution, the library validates input parameters against the skill's JSON Schema, checking for required fields, type correctness, and allowed enum values.
 
 ### Smart Matching Logic
 RXON formalizes the rules for matching tasks to holons:

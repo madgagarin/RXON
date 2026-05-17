@@ -1,5 +1,6 @@
 # Copyright (c) 2025-2026 Dmitrii Gagarin aka madgagarin
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 from typing import Any, NamedTuple
 from uuid import UUID, uuid4
@@ -10,37 +11,29 @@ from rxon.utils import _get_cached_type_hints, from_dict, json_dumps, to_dict
 
 
 def test_to_dict_recursion_limit() -> None:
-    # 1. Circular reference
     a: dict[str, Any] = {}
     a["loop"] = a
     with pytest.raises(RecursionError, match="Maximum recursion depth"):
         to_dict(a)
 
-    # 2. Boundary: Exactly 100 levels (should pass)
-    # Depth counting logic
-    # Recursion tracking
     root: dict[str, Any] = {"v": 0}
     curr = root
     for i in range(1, 100):
         curr["n"] = {"v": i}
         curr = curr["n"]
 
-    # Depth 99 check
     result = to_dict(root)
     assert result["n"]["v"] == 1
 
-    # 3. Boundary: 101 levels (should fail)
     curr["extra"] = {"final": True}
     with pytest.raises(RecursionError, match="Maximum recursion depth"):
         to_dict(root)
 
-    # 4. Mixed structures
-    complex_deep = {"a": [{"b": [{"c": "end"}]}]}  # 5 levels of recursion
+    complex_deep = {"a": [{"b": [{"c": "end"}]}]}
     assert to_dict(complex_deep)["a"][0]["b"][0]["c"] == "end"
 
 
 def test_to_dict_normalization_floats() -> None:
-    # Float to Int normalization check
     data = {"val": 10.0, "nested": [1.0, 2.5]}
     result = to_dict(data)
 
@@ -121,7 +114,6 @@ def test_json_dumps() -> None:
 
 
 def test_from_dict_extra_fields() -> None:
-    # Extra fields in dict should be ignored during instantiation
     data = {"x": 10, "y": 20, "extra_garbage": "something"}
     p = from_dict(Point, data)
     assert p.x == 10
@@ -148,16 +140,13 @@ def test_from_dict_deep_nesting_and_mixed() -> None:
 
 
 def test_from_dict_extreme_chaos() -> None:
-    # Expecting a Point (NamedTuple), but getting a string
     data = {"points": "this-should-be-a-list-of-dicts"}
-    # from_dict currently fails only on instantiation, so Config will fail because 'name' is missing
     with pytest.raises(ValueError, match="Failed to instantiate Config"):
         from_dict(Config, data)
 
-    # Missing required field in nested restoration
-    data2 = {"name": "test", "points": [123]}  # Point expects dict, gets int
+    data2 = {"name": "test", "points": [123]}
     c2 = from_dict(Config, data2)
-    assert c2.points == [123]  # _restore_field returns raw if not a dict
+    assert c2.points == [123]
 
 
 def test_from_dict_optional_list() -> None:
@@ -223,7 +212,6 @@ def test_from_dict_union_models_logic() -> None:
 
     data_b = {"union": {"b": "hello"}}
 
-    # After fix, this should try ModelA (fail) and then ModelB (succeed)
     res = from_dict(Root, data_b)
     assert isinstance(res.union, ModelB)
     assert res.union.b == "hello"
@@ -240,7 +228,6 @@ def test_type_hints_caching() -> None:
     assert hints_other is not hints1
     assert "x" in hints_other
 
-    # Verify cache info (if accessible)
     info = _get_cached_type_hints.cache_info()
     assert info.hits > 0
 
@@ -258,3 +245,92 @@ def test_from_dict_uuid_keys() -> None:
     assert isinstance(key, UUID)
     assert key == uid
     assert res.mapping[key] == "worker-1"
+
+
+def test_to_dict_none_preservation_in_lists() -> None:
+    data = {"a": None, "b": [1, None, 2], "c": {"d": None, "e": 3}}
+    result = to_dict(data)
+    assert "a" not in result
+    assert result["b"] == [1, None, 2]
+    assert "d" not in result["c"]
+    assert result["c"]["e"] == 3
+
+
+def test_to_dict_integer_keys_normalization() -> None:
+    data = {1: "int", "2": "str"}
+    result = to_dict(data)
+    assert result == {"1": "int", "2": "str"}
+    assert all(isinstance(k, str) for k in result.keys())
+
+
+def test_to_dict_datetime_support() -> None:
+    dt = datetime(2026, 5, 17, 12, 30, 0)
+    result = to_dict(dt)
+    assert isinstance(result, str)
+    assert "2026-05-17" in result
+
+
+def test_to_dict_pydantic_v2_mock() -> None:
+    class MockPydanticV2:
+        def model_dump(self) -> dict[str, Any]:
+            return {"field": "value", "empty": None}
+
+    obj = MockPydanticV2()
+    result = to_dict(obj)
+    assert result == {"field": "value"}
+
+
+def test_to_dict_pydantic_v1_mock() -> None:
+    class MockPydanticV1:
+        def dict(self) -> dict[str, Any]:
+            return {"field": "v1", "none": None}
+
+    obj = MockPydanticV1()
+    result = to_dict(obj)
+    assert result == {"field": "v1"}
+
+
+def test_to_dict_float_normalization_edge_cases() -> None:
+    data = {"normal": 10.5, "zero_frac": 10.0, "large": 1e10}
+    result = to_dict(data)
+    assert isinstance(result["normal"], float)
+    assert isinstance(result["zero_frac"], int)
+    assert isinstance(result["large"], int) or (isinstance(result["large"], float) and result["large"] == 1e10)
+
+    data2 = {"small": 0.00000000000001}
+    result2 = to_dict(data2)
+    assert isinstance(result2["small"], float)
+
+
+def test_from_dict_datetime() -> None:
+    @dataclass
+    class Log:
+        ts: datetime
+
+    dt = datetime(2026, 5, 17, 12, 0, 0)
+    data = {"ts": dt.isoformat()}
+
+    res = from_dict(Log, data)
+    assert isinstance(res.ts, datetime)
+    assert res.ts == dt
+
+
+def test_from_dict_datetime_negative() -> None:
+    @dataclass
+    class Log:
+        ts: datetime
+
+    data = {"ts": "not-a-date"}
+    res = from_dict(Log, data)
+    assert res.ts == "not-a-date"
+
+
+def test_to_dict_deep_mixed_structures() -> None:
+    class Node(NamedTuple):
+        val: int
+        next: Any = None
+
+    root = Node(0, {"a": [Node(1, None)]})
+    result = to_dict(root)
+    assert result["val"] == 0
+    assert result["next"]["a"][0]["val"] == 1

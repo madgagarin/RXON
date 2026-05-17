@@ -32,9 +32,10 @@ En las redes tradicionales, los comandos suelen fluir "de arriba hacia abajo" (m
 
 ### Validación y Normalización Interna
 La biblioteca garantiza la integridad de los datos en varios niveles:
-1.  **Estabilidad de Serialización**: Al firmar mensajes, RXON normaliza todos los tipos numéricos y ordena las claves de los diccionarios para asegurar que el mismo objeto siempre produzca el mismo hash HMAC.
-2.  **Protección de Recurrencia**: Todas las operaciones recursivas están limitadas a una profundidad de 100 para evitar el desbordamiento de pila o ataques DoS a través de datos maliciosos.
-3.  **Cumplimiento de Esquemas**: Antes de la ejecución de la tarea, la biblioteca valida los parámetros de entrada contra el JSON Schema de la habilidad, verificando los campos obligatorios, la corrección de tipos y los valores permitidos (Enums).
+1.  **Estabilidad de Serialización**: RXON utiliza un mecanismo de **JSON Round-trip** con `orjson` para normalizar todos los tipos numéricos (`10.0` -> `10`), forzar las claves de los diccionarios a cadenas y ordenar las claves. Esto asegura que el mismo objeto siempre produzca exactamente el mismo hash HMAC independientemente de pequeñas diferencias de formato.
+2.  **Soporte Completo de Tipos**: El soporte nativo para `datetime`, `UUID`, `Enum` y modelos **Pydantic** asegura una integración fluida con los ecosistemas modernos de Python manteniendo la consistencia criptográfica.
+3.  **Protección de Recurrencia**: Todas las operaciones recursivas están limitadas a una profundidad de 100 para evitar el desbordamiento de pila o ataques DoS a través de datos maliciosos.
+4.  **Cumplimiento de Esquemas**: Antes de la ejecución de la tarea, la biblioteca valida los parámetros de entrada contra el JSON Schema de la habilidad, verificando los campos obligatorios, la corrección de tipos y los valores permitidos (Enums).
 
 ### Lógica de Coincidencia Inteligente (Smart Matching)
 RXON formaliza las reglas para emparejar tareas con holones:
