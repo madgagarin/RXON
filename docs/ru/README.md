@@ -26,7 +26,7 @@
     *   **Списки**: Используется логика **Вхождения** (значение в списке) или **Пересечения** (общие элементы).
     *   **Строки**: Частичное совпадение моделей оборудования без учета регистра.
 -   **Универсальная телеметрия**: Хартбиты включают детальные метрики для любых кастомных устройств (датчики, GPU, приводы) и общие системные свойства через расширяемую модель `HardwareDevice`.
--   **Отказоустойчивый транспорт**: Реализация HTTP/WebSocket с автоматическим обновлением токенов (STS), экспоненциальным backoff при переподключениях, корректным завершением сессий и встроенной обработкой **Rate Limit (HTTP 429)** с поддержкой `Retry-After`.
+-   **Отказоустойчивый транспорт**: Реализация HTTP/WebSocket с Secure Token Service (STS) поддержкой **Refresh Tokens**, экспоненциальным backoff при переподключениях и встроенной обработкой **Rate Limit (HTTP 429)** с поддержкой `Retry-After`.
 
 ## 🏗 Архитектура и Логика
 
@@ -53,6 +53,7 @@ RXON определяет набор стандартизированных ко
 
 ## 🧪 Быстрый старт
 
+### Сторона Воркера (PULL)
 ```python
 from rxon import create_transport
 from rxon.models import Resources, HardwareDevice
@@ -60,7 +61,7 @@ from rxon.models import Resources, HardwareDevice
 # 1. Создание транспорта (поддерживает http, https, ws, wss)
 transport = create_transport("ws://api.hln.local", "worker-01", "secret-token")
 
-# 2. Определение ресурсов воркера (RAM и ядра CPU теперь в properties)
+# 2. Определение ресурсов воркера
 my_res = Resources(
     properties={"ram_gb": 64, "cpu_cores": 16},
     devices=[HardwareDevice(type="gpu", model="RTX 4090", properties={"vram_gb": 24})]
@@ -70,6 +71,26 @@ my_res = Resources(
 req = Resources(devices=[HardwareDevice(type="gpu", properties={"vram_gb": 16})])
 if my_res.matches(req):
     print("Этот холон готов к выполнению задачи!")
+```
+
+### Сторона Оркестратора (Сервер)
+```python
+from aiohttp import web
+from rxon import HttpListener
+
+app = web.Application()
+listener = HttpListener(app)
+
+# ОБЯЗАТЕЛЬНО: Регистрация маршрутов RXON до запуска приложения
+listener.setup_routes()
+
+async def my_handler(action, payload, context):
+    if action == "poll":
+        return {"job_id": "j-1", "task_id": "t-1", "type": "echo"}
+    return {"status": "ok"}
+
+# Запуск прослушивания
+await listener.start(handler=my_handler)
 ```
 
 ## 📜 Лицензия

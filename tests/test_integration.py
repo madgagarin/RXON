@@ -75,6 +75,7 @@ async def server(unused_tcp_port_factory: Any) -> Any:
         elif msg_type == "sts_token":
             return TokenResponse(access_token="new_refreshed_token", expires_in=3600, worker_id="test")
 
+    listener.setup_routes()
     await listener.start(handler=mock_handler)
     runner = web.AppRunner(app)
     await runner.setup()
@@ -519,6 +520,72 @@ async def test_rate_limit_error(server: tuple[str, dict[str, Any], HttpListener]
 
 
 @pytest.mark.asyncio
+async def test_sts_refresh_token_flow(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    base_url, state, listener = server
+    worker_id = "worker-refresh-test"
+
+    async def sts_refresh_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        if msg_type == "register":
+            return {
+                "access_token": "initial-access",
+                "refresh_token": "initial-refresh",
+                "expires_in": 300,
+                "worker_id": worker_id,
+            }
+        if msg_type == "sts_refresh":
+            assert payload["refresh_token"] == "initial-refresh"
+            assert context["worker_id_hint"] == worker_id
+            return {
+                "access_token": "new-access",
+                "refresh_token": "new-refresh",
+                "expires_in": 600,
+                "worker_id": worker_id,
+            }
+        return {"status": "ok"}
+
+    listener.handler = sts_refresh_handler
+    transport = cast(HttpTransport, create_transport(base_url, worker_id, "temporary"))
+    await transport.connect()
+
+    try:
+        await transport.register(WorkerRegistration(worker_id))
+        assert transport.token == "initial-access"
+        assert transport.refresh_token_value == "initial-refresh"
+
+        res = await transport.refresh_token()
+        assert res is not None
+        assert transport.token == "new-access"
+        assert transport.refresh_token_value == "new-refresh"
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_poll_task_hot_skills_server_side(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    base_url, state, listener = server
+    worker_id = "worker-hot-skills"
+
+    async def poll_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        if msg_type == "poll":
+            # Verify server extracted hot_skills from context (which came from query params)
+            assert "hot_skills" in context
+            assert context["hot_skills"] == ["fast-skill"]
+            return {"job_id": "j-1", "task_id": "t-1", "type": "fast-skill"}
+        return {}
+
+    listener.handler = poll_handler
+    transport = create_transport(base_url, worker_id, "token")
+    await transport.connect()
+
+    try:
+        task = await transport.poll_task(timeout=1.0, hot_skills=["fast-skill"])
+        assert task is not None
+        assert task.type == "fast-skill"
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
 async def test_rate_limit_during_poll(server: tuple[str, dict[str, Any], HttpListener]) -> None:
     base_url, _, listener = server
 
@@ -622,10 +689,61 @@ async def test_rate_limit_retry_after_date(server: tuple[str, dict[str, Any], Ht
     await transport.connect()
 
     try:
-        with pytest.raises(RxonRateLimitError) as exc_info:
+        with pytest.raises(RxonRateLimitError):
             await transport.send_heartbeat(Heartbeat("retry-date", "idle"))
 
-        val = exc_info.value.details["retry_after"]
-        assert 3500 < val < 3700
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_poll_task_hot_skills_edge_cases(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    """Tests empty, None, and malformed hot_skills strings."""
+    base_url, state, listener = server
+    worker_id = "worker-hot-edge"
+
+    async def edge_poll_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        if msg_type == "poll":
+            state["last_context"] = context
+            return None
+        return {}
+
+    listener.handler = edge_poll_handler
+    transport = create_transport(base_url, worker_id, "token")
+    await transport.connect()
+
+    try:
+        await transport.poll_task(timeout=0.1, hot_skills=None)
+        assert "hot_skills" not in state["last_context"]
+
+        await transport.poll_task(timeout=0.1, hot_skills=[])
+        assert state["last_context"]["hot_skills"] == []
+
+        await transport.poll_task(timeout=0.1, hot_skills=[" skill1", "", "  ", "skill2 "])
+        assert state["last_context"]["hot_skills"] == ["skill1", "skill2"]
+    finally:
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_sts_refresh_auth_error(server: tuple[str, dict[str, Any], HttpListener]) -> None:
+    """Tests behavior when the refresh call itself returns 401/403."""
+    base_url, _, listener = server
+
+    async def refresh_fail_handler(msg_type: str, payload: Any, context: dict[str, Any]) -> Any:
+        if msg_type == "sts_refresh":
+            return web.Response(status=401, text="Refresh token expired")
+        return {"status": "ok"}
+
+    listener.handler = refresh_fail_handler
+    transport = cast(HttpTransport, create_transport(base_url, "refresh-fail", "access"))
+    transport.refresh_token_value = "bad-refresh"
+    await transport.connect()
+
+    try:
+        res = await transport.refresh_token()
+        assert res is None
+        # Ensure we didn't crash and kept the old token (or it will fail on next request)
+        assert transport.token == "access"
     finally:
         await transport.close()

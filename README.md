@@ -26,7 +26,7 @@ In traditional networks, commands usually flow "top-down" (Push model). In **RXO
     *   **Lists**: Uses **Inclusion** (val in list) or **Intersection** (any common element).
     *   **Strings**: Case-insensitive partial matching for hardware models.
 - **Unified Telemetry**: Heartbeats include granular metrics for any custom devices (Sensors, GPUs, Actuators) and generic system properties via the extensible `HardwareDevice` model.
--   **Resilient Transport**: HTTP/WebSocket implementation with automatic token refresh (STS), exponential backoff for reconnections, graceful session closing, and built-in **Rate Limit (HTTP 429)** handling with `Retry-After` support.
+-   **Resilient Transport**: HTTP/WebSocket implementation with Secure Token Service (STS) supporting **Refresh Tokens**, exponential backoff for reconnections, and built-in **Rate Limit (HTTP 429)** handling with `Retry-After`.
 
 
 ## 🏗 Architecture & Logic
@@ -46,6 +46,7 @@ RXON formalizes the rules for matching tasks to holons:
 
 ## 🧪 Quick Start
 
+### Worker Side (PULL)
 ```python
 from rxon import create_transport
 from rxon.models import Resources, HardwareDevice
@@ -53,7 +54,7 @@ from rxon.models import Resources, HardwareDevice
 # 1. Create transport (supports http, https, ws, wss)
 transport = create_transport("ws://api.hln.local", "worker-01", "secret-token")
 
-# 2. Define worker resources (RAM/CPU cores are now part of properties)
+# 2. Define worker resources
 my_res = Resources(
     properties={"ram_gb": 64, "cpu_cores": 16},
     devices=[HardwareDevice(type="gpu", model="RTX 4090", properties={"vram_gb": 24})]
@@ -63,6 +64,26 @@ my_res = Resources(
 req = Resources(devices=[HardwareDevice(type="gpu", properties={"vram_gb": 16})])
 if my_res.matches(req):
     print("This holon is ready for the task!")
+```
+
+### Orchestrator Side (Server)
+```python
+from aiohttp import web
+from rxon import HttpListener
+
+app = web.Application()
+listener = HttpListener(app)
+
+# MANDATORY: Register RXON routes before app startup
+listener.setup_routes()
+
+async def my_handler(action, payload, context):
+    if action == "poll":
+        return {"job_id": "j-1", "task_id": "t-1", "type": "echo"}
+    return {"status": "ok"}
+
+# Start listening
+await listener.start(handler=my_handler)
 ```
 
 ## 📜 License

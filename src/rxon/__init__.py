@@ -88,11 +88,9 @@ from rxon.validators import is_valid_identifier, validate_identifier
 __version__ = PROTOCOL_VERSION
 
 __all__ = [
-    # Blob
     "RXON_BLOB_SCHEME",
     "calculate_config_hash",
     "parse_uri",
-    # Constants
     "AUTH_HEADER_CLIENT",
     "AUTH_HEADER_WORKER",
     "COMMAND_CANCEL_TASK",
@@ -132,7 +130,6 @@ __all__ = [
     "TASK_STATUS_SUCCESS",
     "WORKER_API_PREFIX",
     "WS_ENDPOINT",
-    # Exceptions
     "RxonError",
     "RxonNetworkError",
     "RxonAuthError",
@@ -140,7 +137,6 @@ __all__ = [
     "IntegrityError",
     "ParamValidationError",
     "S3ConfigMismatchError",
-    # Models
     "DeviceUsage",
     "FileMetadata",
     "HardwareDevice",
@@ -158,21 +154,17 @@ __all__ = [
     "WorkerCommand",
     "WorkerEventPayload",
     "WorkerRegistration",
-    # Security
     "create_client_ssl_context",
     "create_server_ssl_context",
     "extract_cert_identity",
-    # Transports
     "Listener",
     "Transport",
     "create_transport",
     "HttpTransport",
     "HttpListener",
-    # Utils
     "from_dict",
     "to_dict",
     "loads",
-    # Validators
     "is_valid_identifier",
     "validate_identifier",
 ]

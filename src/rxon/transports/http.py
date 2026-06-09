@@ -2,6 +2,7 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 from asyncio import sleep
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -21,6 +22,7 @@ from aiohttp import (
 
 from rxon.constants import (
     AUTH_HEADER_WORKER,
+    AUTH_HEADER_WORKER_ID,
     ENDPOINT_TASK_NEXT,
     ENDPOINT_TASK_RESULT,
     ENDPOINT_WORKER_EVENTS,
@@ -30,6 +32,7 @@ from rxon.constants import (
     IGNORED_REASON_LATE,
     PROTOCOL_VERSION,
     PROTOCOL_VERSION_HEADER,
+    STS_REFRESH_ENDPOINT,
     STS_TOKEN_ENDPOINT,
     WS_ENDPOINT,
 )
@@ -68,11 +71,13 @@ class HttpTransport(Transport):
         self.base_url = base_url.rstrip("/")
         self.worker_id = worker_id
         self.token = token
+        self.refresh_token_value: str | None = None
         self.ssl_context = ssl_context
         self._session = session
         self._own_session = False
         self._headers = {
             AUTH_HEADER_WORKER: self.token,
+            AUTH_HEADER_WORKER_ID: self.worker_id,
             PROTOCOL_VERSION_HEADER: PROTOCOL_VERSION,
         }
         self.verify_ssl = verify_ssl
@@ -179,13 +184,25 @@ class HttpTransport(Transport):
     async def refresh_token(self) -> TokenResponse | None:
         if not self._session:
             return None
-        url = f"{self.base_url}{STS_TOKEN_ENDPOINT}"
+
+        if self.refresh_token_value:
+            url = f"{self.base_url}{STS_REFRESH_ENDPOINT}"
+            json_body = {"refresh_token": self.refresh_token_value}
+            headers = self._headers.copy()
+            headers[AUTH_HEADER_WORKER_ID] = self.worker_id
+        else:
+            url = f"{self.base_url}{STS_TOKEN_ENDPOINT}"
+            json_body = None
+            headers = self._headers.copy()
+            headers[AUTH_HEADER_WORKER_ID] = self.worker_id
+
         try:
-            async with self._session.post(url, headers=self._headers) as resp:
+            async with self._session.post(url, headers=headers, json=json_body) as resp:
                 if resp.status == 200:
                     data = await resp.json(loads=loads)
                     res = cast(TokenResponse, from_dict(TokenResponse, data))
                     self.token = res.access_token
+                    self.refresh_token_value = res.refresh_token
                     self._headers[AUTH_HEADER_WORKER] = self.token
                     logger.info(f"Token refreshed. Expires in {res.expires_in}s")
                     return res
@@ -194,7 +211,17 @@ class HttpTransport(Transport):
         return None
 
     async def register(self, registration: WorkerRegistration) -> Any:
-        return await self._request("POST", ENDPOINT_WORKER_REGISTER, json=registration)
+        resp = await self._request("POST", ENDPOINT_WORKER_REGISTER, json=registration)
+        if isinstance(resp, dict) and "access_token" in resp:
+            try:
+                res = cast(TokenResponse, from_dict(TokenResponse, resp))
+                self.token = res.access_token
+                self.refresh_token_value = res.refresh_token
+                self._headers[AUTH_HEADER_WORKER] = self.token
+                logger.info("Token updated from registration response")
+            except Exception as e:
+                logger.warning(f"Failed to parse token response from registration: {e}")
+        return resp
 
     async def poll_task(
         self,
@@ -204,9 +231,9 @@ class HttpTransport(Transport):
     ) -> TaskPayload | None:
         endpoint = ENDPOINT_TASK_NEXT.format(worker_id=self.worker_id)
         params: dict[str, Any] = {"timeout": timeout}
-        if available_skills:
+        if available_skills is not None:
             params["available_skills"] = ",".join(available_skills)
-        if hot_skills:
+        if hot_skills is not None:
             params["hot_skills"] = ",".join(hot_skills)
 
         data = await self._request("GET", endpoint, params=params, timeout=ClientTimeout(total=timeout + 5))
@@ -268,7 +295,7 @@ class HttpTransport(Transport):
             try:
                 async with self._session.ws_connect(ws_url, headers=self._headers) as ws:
                     self._ws_connection = cast(Any, ws)
-                    retry_delay = 1.0  # Reset delay on successful connection
+                    retry_delay = 1.0
                     async for msg in ws:
                         if msg.type == WSMsgType.TEXT:
                             try:
@@ -293,7 +320,3 @@ class HttpTransport(Transport):
             await sleep(retry_delay)
             retry_delay = min(retry_delay * 2, max_delay)
             self._ws_connection = None
-
-
-tion = None
-on = None

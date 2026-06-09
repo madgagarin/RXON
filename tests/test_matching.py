@@ -1,4 +1,8 @@
 # Copyright (c) 2025-2026 Dmitrii Gagarin aka madgagarin
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 from rxon.models import HardwareDevice, InstalledArtifact, Resources
 
 
@@ -187,8 +191,6 @@ def test_matching_advanced_lists() -> None:
     assert not res2.matches(Resources(properties={"tags": "remote"}))
 
     # 3. Boundary: empty lists
-    # Empty requirement list logic check
-    # Boundary case check
     assert not res2.matches(Resources(properties={"tags": []}))
 
     # Worker with empty list should not match requirement with value

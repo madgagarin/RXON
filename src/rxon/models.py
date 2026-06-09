@@ -237,6 +237,7 @@ class TokenResponse(NamedTuple):
     access_token: str
     expires_in: int
     worker_id: str
+    refresh_token: str | None = None
     metadata: dict[str, Any] | None = None
 
 

@@ -10,6 +10,7 @@ from aiohttp import web
 
 from rxon.constants import (
     AUTH_HEADER_WORKER,
+    AUTH_HEADER_WORKER_ID,
     ENDPOINT_TASK_NEXT,
     ENDPOINT_TASK_RESULT,
     ENDPOINT_WORKER_EVENTS,
@@ -17,6 +18,7 @@ from rxon.constants import (
     ENDPOINT_WORKER_REGISTER,
     PROTOCOL_VERSION,
     PROTOCOL_VERSION_HEADER,
+    STS_REFRESH_ENDPOINT,
     STS_TOKEN_ENDPOINT,
     WS_ENDPOINT,
 )
@@ -40,7 +42,6 @@ class HttpListener(Listener):
         self._setup_middleware()
 
     def _setup_middleware(self) -> None:
-        @web.middleware
         async def version_middleware(
             request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]
         ) -> web.StreamResponse:
@@ -48,38 +49,39 @@ class HttpListener(Listener):
             response.headers[PROTOCOL_VERSION_HEADER] = PROTOCOL_VERSION
             return response
 
-        self.app.middlewares.append(version_middleware)
+        self.app.middlewares.append(web.middleware(version_middleware))
 
-    async def start(
-        self,
-        handler: Callable[[str, Any, dict[str, Any]], Awaitable[Any]],
-    ) -> None:
-        self.handler = handler
-        self._setup_routes()
-
-    async def stop(self) -> None:
-        # App lifecycle is managed externally
-        pass
-
-    def _setup_routes(self) -> None:
+    def setup_routes(self) -> None:
+        """Synchronously registers routes. Must be called before app freeze."""
         self.app.router.add_post(ENDPOINT_WORKER_REGISTER, self._handle_register)
         self.app.router.add_get(ENDPOINT_TASK_NEXT, self._handle_poll)
         self.app.router.add_post(ENDPOINT_TASK_RESULT, self._handle_result)
         self.app.router.add_patch(ENDPOINT_WORKER_HEARTBEAT, self._handle_heartbeat)
         self.app.router.add_post(ENDPOINT_WORKER_EVENTS, self._handle_event)
         self.app.router.add_post(STS_TOKEN_ENDPOINT, self._handle_sts)
+        self.app.router.add_post(STS_REFRESH_ENDPOINT, self._handle_sts_refresh)
 
-        # WebSocket endpoint
         self.app.router.add_get(f"{WS_ENDPOINT}/{{worker_id}}", self._handle_ws)
+
+    async def start(
+        self,
+        handler: Callable[[str, Any, dict[str, Any]], Awaitable[Any]],
+    ) -> None:
+        self.handler = handler
+
+    async def stop(self) -> None:
+        pass
 
     @staticmethod
     def _extract_context(request: web.Request) -> dict[str, Any]:
         token = request.headers.get(AUTH_HEADER_WORKER)
+        worker_id = request.headers.get(AUTH_HEADER_WORKER_ID)
         version = request.headers.get(PROTOCOL_VERSION_HEADER)
         cert_id = extract_cert_identity(request)
 
         return {
             "token": token,
+            "worker_id_hint": worker_id,
             "protocol_version": version,
             "cert_identity": cert_id,
             "transport": "http",
@@ -100,7 +102,7 @@ class HttpListener(Listener):
             if self.handler:
                 resp = await self.handler("register", payload, context)
                 return self._json_response(resp or {"status": "registered"})
-            return self._json_response({"error": "No handler configured"}, status=500)
+            return self._json_response({"error": "Service is initializing"}, status=503)
         except web.HTTPException as e:
             return self._json_response({"error": e.text or str(e)}, status=e.status)
         except PermissionError as e:
@@ -118,15 +120,29 @@ class HttpListener(Listener):
             if not worker_id:
                 return self._json_response({"error": "worker_id required"}, status=400)
 
+            try:
+                timeout = float(request.query.get("timeout", 0))
+            except ValueError:
+                timeout = 0
+
             context = self._extract_context(request)
-            context["worker_id_hint"] = worker_id  # Important for auth
+            context["worker_id_hint"] = worker_id
+            context["poll_timeout"] = timeout
+
+            if "available_skills" in request.query:
+                available_skills = request.query.get("available_skills", "").split(",")
+                context["available_skills"] = [s.strip() for s in available_skills if s.strip()]
+
+            if "hot_skills" in request.query:
+                hot_skills = request.query.get("hot_skills", "").split(",")
+                context["hot_skills"] = [s.strip() for s in hot_skills if s.strip()]
 
             if self.handler:
                 task = await self.handler("poll", worker_id, context)
                 if task:
                     return self._json_response(task)
                 return web.Response(status=204)
-            return web.Response(status=500)
+            return web.Response(status=503, text="Service is initializing")
         except web.HTTPException as e:
             return self._json_response({"error": e.text or str(e)}, status=e.status)
         except PermissionError as e:
@@ -147,7 +163,7 @@ class HttpListener(Listener):
             if self.handler:
                 resp = await self.handler("result", payload, context)
                 return self._json_response(resp or {"status": "ok"})
-            return self._json_response({"error": "No handler configured"}, status=500)
+            return self._json_response({"error": "Service is initializing"}, status=503)
         except web.HTTPException as e:
             return self._json_response({"error": e.text or str(e)}, status=e.status)
         except PermissionError as e:
@@ -173,7 +189,7 @@ class HttpListener(Listener):
             if self.handler:
                 resp = await self.handler("heartbeat", payload, context)
                 return self._json_response(resp)
-            return web.Response(status=500)
+            return web.Response(status=503, text="Service is initializing")
         except web.HTTPException as e:
             return self._json_response({"error": e.text or str(e)}, status=e.status)
         except PermissionError as e:
@@ -194,7 +210,7 @@ class HttpListener(Listener):
             if self.handler:
                 resp = await self.handler("event", payload, context)
                 return self._json_response(resp or {"status": "event_accepted"})
-            return self._json_response({"error": "No handler configured"}, status=500)
+            return self._json_response({"error": "Service is initializing"}, status=503)
         except web.HTTPException as e:
             return self._json_response({"error": e.text or str(e)}, status=e.status)
         except PermissionError as e:
@@ -212,7 +228,27 @@ class HttpListener(Listener):
             if self.handler:
                 token_data = await self.handler("sts_token", None, context)
                 return self._json_response(token_data)
-            return web.Response(status=500)
+            return web.Response(status=503, text="Service is initializing")
+        except web.HTTPException as e:
+            return self._json_response({"error": e.text or str(e)}, status=e.status)
+        except PermissionError as e:
+            return self._json_response({"error": str(e)}, status=403)
+        except RxonRateLimitError as e:
+            return self._json_response({"error": str(e), "code": e.details.get("code")}, status=429)
+        except ValueError as e:
+            return self._json_response({"error": str(e)}, status=400)
+        except Exception as e:
+            return self._json_response({"error": str(e)}, status=500)
+
+    async def _handle_sts_refresh(self, request: web.Request) -> web.Response:
+        try:
+            data = await request.json(loads=loads)
+            payload = data
+            context = self._extract_context(request)
+            if self.handler:
+                token_data = await self.handler("sts_refresh", payload, context)
+                return self._json_response(token_data)
+            return web.Response(status=503, text="Service is initializing")
         except web.HTTPException as e:
             return self._json_response({"error": e.text or str(e)}, status=e.status)
         except PermissionError as e:
@@ -230,7 +266,6 @@ class HttpListener(Listener):
         if worker_id:
             context["worker_id_hint"] = worker_id
 
-        # Auth before handshake
         if self.handler:
             try:
                 await self.handler("websocket_auth", None, context)

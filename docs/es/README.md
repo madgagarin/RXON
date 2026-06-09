@@ -25,8 +25,8 @@ En las redes tradicionales, los comandos suelen fluir "de arriba hacia abajo" (m
     *   **Números**: Utiliza la lógica **GE (Greater or Equal)** (Requisito <= Disponible).
     *   **Listas**: Utiliza la lógica de **Inclusión** (valor en la lista) o **Intersección** (cualquier elemento común).
     *   **Cadenas**: Coincidencia parcial de modelos de hardware sin distinción de mayúsculas y minúsculas.
--   **Telemetría Universal**: Los heartbeats include métricas detalladas para cualquier dispositivo personalizado (sensores, GPUs, actuadores) y propiedades del sistema genéricas a través del modelo extensible `HardwareDevice`.
--   **Transporte Resiliente**: Implementación HTTP/WebSocket con actualización automática de tokens (STS), backoff exponencial para reconexiones, cierre de sesión elegante y manejo nativo de **Rate Limit (HTTP 429)** con soporte para `Retry-After`.
+-   **Telemetría Universal**: Los heartbeats incluyen métricas detalladas para cualquier dispositivo personalizado (sensores, GPUs, actuadores) y propiedades del sistema genéricas a través del modelo extensible `HardwareDevice`.
+-   **Transporte Resiliente**: Implementación HTTP/WebSocket con Secure Token Service (STS) que soporta **Refresh Tokens**, backoff exponencial para reconexiones y manejo nativo de **Rate Limit (HTTP 429)** con soporte para `Retry-After`.
 
 ## 🏗 Arquitectura y Lógica
 
@@ -53,6 +53,7 @@ RXON define un conjunto de códigos de error estandarizados para asegurar un com
 
 ## 🧪 Inicio Rápido
 
+### Lado del Trabajador (PULL)
 ```python
 from rxon import create_transport
 from rxon.models import Resources, HardwareDevice
@@ -60,7 +61,7 @@ from rxon.models import Resources, HardwareDevice
 # 1. Crear transporte (soporta http, https, ws, wss)
 transport = create_transport("ws://api.hln.local", "worker-01", "secret-token")
 
-# 2. Definir recursos del trabajador (RAM y núcleos de CPU ahora en properties)
+# 2. Definir recursos del trabajador
 my_res = Resources(
     properties={"ram_gb": 64, "cpu_cores": 16},
     devices=[HardwareDevice(type="gpu", model="RTX 4090", properties={"vram_gb": 24})]
@@ -70,6 +71,26 @@ my_res = Resources(
 req = Resources(devices=[HardwareDevice(type="gpu", properties={"vram_gb": 16})])
 if my_res.matches(req):
     print("¡Este holón está listo para la tarea!")
+```
+
+### Lado del Orquestador (Servidor)
+```python
+from aiohttp import web
+from rxon import HttpListener
+
+app = web.Application()
+listener = HttpListener(app)
+
+# OBLIGATORIO: Registrar rutas RXON antes del inicio de la aplicación
+listener.setup_routes()
+
+async def my_handler(action, payload, context):
+    if action == "poll":
+        return {"job_id": "j-1", "task_id": "t-1", "type": "echo"}
+    return {"status": "ok"}
+
+# Iniciar escucha
+await listener.start(handler=my_handler)
 ```
 
 ## 📜 Licencia
