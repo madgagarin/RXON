@@ -164,7 +164,6 @@ def test_validate_data_enum() -> None:
 
 
 def test_validate_data_nested_arrays() -> None:
-    # A schema representing list of lists of strings
     schema = {"type": "array", "items": {"type": "array", "items": {"type": "string"}}}
 
     assert validate_data([["a", "b"], ["c"]], schema)[0] is True
@@ -173,7 +172,6 @@ def test_validate_data_nested_arrays() -> None:
 
 
 def test_validate_data_union_anyof_failure() -> None:
-    # Schema requires either a number > 100 or a specific string
     schema = {"anyOf": [{"type": "integer"}, {"type": "string", "enum": ["start", "stop"]}]}
 
     assert validate_data(123, schema)[0] is True

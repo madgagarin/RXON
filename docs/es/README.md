@@ -45,8 +45,8 @@ La biblioteca garantiza la integridad de los datos en varios niveles:
 
 1.  **Estabilidad de Serialización**: RXON utiliza un mecanismo de **JSON Round-trip** con `orjson` para normalizar todos los tipos numéricos (`10.0` -> `10`), forzar las claves de los diccionarios a cadenas y ordenar las claves. Esto asegura que el mismo objeto siempre produzca exactamente el mismo hash HMAC independientemente de pequeñas diferencias de formato.
 2.  **Soporte Completo de Tipos**: El soporte nativo para `datetime`, `UUID`, `Enum` y modelos **Pydantic** asegura una integración fluida con los ecosistemas modernos de Python manteniendo la consistencia criptográfica.
-3.  **Protección de Recurrencia**: Todas las operaciones recursivas están limitadas a una profundidad de 100 para evitar el desbordamiento de pila o ataques DoS a través de datos maliciosos.
-4.  **Cumplimiento de Esquemas**: Antes de la ejecución de la tarea, la biblioteca valida los parámetros de entrada contra el JSON Schema de la habilidad, verificando los campos obligatorios, la corrección de tipos y los valores permitidos (Enums).
+3.  **Protección de Recurrencia**: Todas las operaciones recursivas están limitadas a una profundidad de 30 para evitar el desbordamiento de pila o ataques DoS a través de datos maliciosos.
+4.  **Cumplimiento de Esquemas**: Compilación rápida de JSON Schema con almacenamiento en caché seguro para subprocesos (`SkillInfo.input_validator`, `SkillInfo.output_validator`). Antes de la ejecución de la tarea, la biblioteca valida los parámetros de entrada contra el JSON Schema de la habilidad, verificando los campos obligatorios, la corrección de tipos y los valores permitidos (Enums).
 
 ### Lógica de Coincidencia Inteligente (Smart Matching)
 
@@ -62,7 +62,8 @@ RXON estandariza la gobernanza de ejecución y el seguimiento de métricas en ho
 
 - **Restricciones de Política (`policy`)**: Diccionario que contiene reglas de ejecución (habilidades permitidas, límites de tokens, presupuesto).
 - **Contadores de Holarquía y Pasos (`depth`, `step`, `parent_hash`)**: Seguimiento de la profundidad de anidamiento (`depth`), índice de paso de transición (`step`) y enlace criptográfico con el evento primario (`parent_hash`).
-- **Firma de Tarea (`sig`)**: Firma criptográfica de la tarea proveniente del orquestador.
+- **Firma de Tarea (`sig`)**: Firma criptográfica HMAC-SHA256 de la tarea generada por el orquestador (`ORCHESTRATOR_SECRET_KEY`) y verificada por el trabajador.
+- **Marca de tiempo (`timestamp`)**: Marca de tiempo Unix entera en segundos (`int`), garantizando la estabilidad multiplataforma y evitando la desviación de precisión flotante.
 - **Informe de Costos (`costs`)**: Campo `TaskResult.costs` para reportar métricas de recursos consumidos (tokens, costo en USD, tiempo de CPU/GPU, por ejemplo `{"tokens": 1500, "usd": 0.02}`).
 
 ## 🛡️ Manejo de Errores

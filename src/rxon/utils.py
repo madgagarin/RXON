@@ -21,13 +21,16 @@ __all__ = [
 ]
 
 
+_MAX_RECURSION_DEPTH: int = 30
+
+
 def to_dict(obj: Any, _depth: int = 0) -> Any:
     """
     Converts any object to a JSON-serializable dictionary/list/scalar.
     Uses orjson round-trip to ensure consistency between signing and verification.
     """
-    if _depth > 100:
-        raise RecursionError("Maximum recursion depth (100) exceeded in to_dict")
+    if _depth > _MAX_RECURSION_DEPTH:
+        raise RecursionError(f"Maximum recursion depth ({_MAX_RECURSION_DEPTH}) exceeded in to_dict")
 
     if obj is None:
         return None
@@ -48,7 +51,7 @@ def to_dict(obj: Any, _depth: int = 0) -> Any:
         json_bytes = dumps(obj, default=default_handler, option=OPT_SORT_KEYS | OPT_NON_STR_KEYS)
     except TypeError as e:
         if "Recursion limit reached" in str(e):
-            raise RecursionError("Maximum recursion depth (100) exceeded in to_dict") from e
+            raise RecursionError(f"Maximum recursion depth ({_MAX_RECURSION_DEPTH}) exceeded in to_dict") from e
         raise e
     normalized = loads(json_bytes)
 
@@ -57,8 +60,8 @@ def to_dict(obj: Any, _depth: int = 0) -> Any:
 
 def _finalize_structure(data: Any, _depth: int = 0) -> Any:
     """Recursively removes None values and normalizes floats to ints."""
-    if _depth > 100:
-        raise RecursionError("Maximum recursion depth (100) exceeded in to_dict")
+    if _depth > _MAX_RECURSION_DEPTH:
+        raise RecursionError(f"Maximum recursion depth ({_MAX_RECURSION_DEPTH}) exceeded in to_dict")
     if isinstance(data, dict):
         return {str(k): _finalize_structure(v, _depth + 1) for k, v in data.items() if v is not None}
     if isinstance(data, list):

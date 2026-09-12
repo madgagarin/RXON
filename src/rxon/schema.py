@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from enum import Enum
+from logging import getLogger
 from re import match as re_match
 from re import sub as re_sub
 from threading import Lock
@@ -20,6 +21,8 @@ from msgspec import NODEFAULT, Struct
 from msgspec.structs import fields as msgspec_fields
 from orjson import OPT_SORT_KEYS
 from orjson import dumps as orjson_dumps
+
+logger = getLogger(__name__)
 
 
 def extract_json_schema(
@@ -192,25 +195,56 @@ def translate_error(msg: str, data: Any) -> str:
 
 _validators_cache: dict[bytes, Any] = {}
 _cache_lock = Lock()
+_MAX_VALIDATOR_CACHE_SIZE: int = 1024
+
+
+def get_compiled_validator(
+    schema: dict[str, Any] | None,
+    skill_name: str | None = None,
+    schema_type: str = "input",
+) -> Any | None:
+    """Returns a compiled fastjsonschema validator using a bounded thread-safe cache."""
+    if not schema:
+        return None
+
+    try:
+        schema_key = orjson_dumps(schema, option=OPT_SORT_KEYS)
+    except Exception:
+        schema_key = str(sorted(schema.items())).encode("utf-8")
+
+    validator = _validators_cache.get(schema_key)
+    if validator is not None:
+        return validator
+
+    with _cache_lock:
+        validator = _validators_cache.get(schema_key)
+        if validator is None:
+            try:
+                validator = compile_schema(schema)
+                if len(_validators_cache) >= _MAX_VALIDATOR_CACHE_SIZE:
+                    _validators_cache.pop(next(iter(_validators_cache)))
+                _validators_cache[schema_key] = validator
+            except Exception as e:
+                if skill_name:
+                    logger.warning(
+                        "Failed to compile %s schema for skill '%s': %s",
+                        schema_type,
+                        skill_name,
+                        e,
+                    )
+                else:
+                    logger.warning("Failed to compile schema: %s", e)
+                return None
+        return validator
 
 
 def validate_data(data: Any, schema: dict[str, Any] | None) -> tuple[bool, str | None]:
     if schema is None or not schema:
         return True, None
 
-    schema_key = orjson_dumps(schema, option=OPT_SORT_KEYS)
-    validator = _validators_cache.get(schema_key)
-    if not validator:
-        with _cache_lock:
-            validator = _validators_cache.get(schema_key)
-            if not validator:
-                try:
-                    validator = compile_schema(schema)
-                    if len(_validators_cache) >= 1024:
-                        _validators_cache.pop(next(iter(_validators_cache)))
-                    _validators_cache[schema_key] = validator
-                except Exception as e:
-                    return False, f"Failed to compile schema: {e}"
+    validator = get_compiled_validator(schema)
+    if validator is None:
+        return False, "Failed to compile schema"
 
     try:
         validator(data)

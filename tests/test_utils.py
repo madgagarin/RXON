@@ -22,16 +22,20 @@ def test_to_dict_recursion_limit() -> None:
 
     root: dict[str, Any] = {"v": 0}
     curr = root
-    for i in range(1, 100):
+    for i in range(1, 25):
         curr["n"] = {"v": i}
         curr = curr["n"]
 
     result = to_dict(root)
     assert result["n"]["v"] == 1
 
-    curr["extra"] = {"final": True}
+    too_deep: dict[str, Any] = {"v": 0}
+    curr = too_deep
+    for i in range(1, 35):
+        curr["n"] = {"v": i}
+        curr = curr["n"]
     with raises(RecursionError, match="Maximum recursion depth"):
-        to_dict(root)
+        to_dict(too_deep)
 
     complex_deep = {"a": [{"b": [{"c": "end"}]}]}
     assert to_dict(complex_deep)["a"][0]["b"][0]["c"] == "end"

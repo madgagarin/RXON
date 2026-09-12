@@ -3,6 +3,10 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+from threading import Thread
+
+from pytest import raises
+
 from rxon.models import (
     HardwareDevice,
     Heartbeat,
@@ -170,3 +174,85 @@ def test_heartbeat_minimal() -> None:
     assert hb.worker_id == "w1"
     assert hb.status == "busy"
     assert hb.usage is None
+
+
+def test_skill_info_frozen_and_validator_cache() -> None:
+    skill = SkillInfo(
+        name="test_skill",
+        input_schema={"type": "object", "properties": {"a": {"type": "integer"}}},
+        output_schema={"type": "object", "properties": {"b": {"type": "string"}}},
+    )
+    with raises(AttributeError):
+        skill.name = "other"  # type: ignore
+
+    val1 = skill.input_validator
+    val2 = skill.input_validator
+    assert val1 is not None
+    assert val1 is val2
+
+    out1 = skill.output_validator
+    out2 = skill.output_validator
+    assert out1 is not None
+    assert out1 is out2
+    assert "_input_validator" not in skill.__struct_fields__
+
+
+def test_skill_info_validator_caching_and_concurrency() -> None:
+    schema1 = {"type": "object", "properties": {"x": {"type": "number"}}}
+    schema2 = {"type": "object", "properties": {"x": {"type": "number"}}}
+    assert id(schema1) != id(schema2)
+
+    skill1 = SkillInfo(name="calc1", input_schema=schema1)
+    skill2 = SkillInfo(name="calc2", input_schema=schema2)
+
+    assert skill1.input_validator is not None
+    assert skill1.input_validator is skill2.input_validator
+
+    results = []
+
+    def worker() -> None:
+        for _ in range(50):
+            v = skill1.input_validator
+            results.append(v is not None)
+
+    threads = [Thread(target=worker) for _ in range(10)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert all(results) and len(results) == 500
+
+
+def test_skill_info_invalid_schema_graceful_handling() -> None:
+    invalid_schema = {"type": 12345}
+    skill = SkillInfo(name="broken", input_schema=invalid_schema, output_schema=invalid_schema)
+
+    assert skill.input_validator is None
+    assert skill.output_validator is None
+
+    skill_none = SkillInfo(name="none_schemas", input_schema=None, output_schema=None)
+    assert skill_none.input_validator is None
+    assert skill_none.output_validator is None
+
+
+def test_task_payload_boundary_timestamps_and_fields() -> None:
+    p0 = TaskPayload(job_id="j1", task_id="t1", type="s1", timestamp=0, sig="valid_sig")
+    raw0 = to_dict(p0)
+    assert raw0["timestamp"] == 0
+    assert raw0["sig"] == "valid_sig"
+    restored0 = from_dict(TaskPayload, raw0)
+    assert restored0.timestamp == 0
+    assert restored0.sig == "valid_sig"
+
+    p_none = TaskPayload(job_id="j1", task_id="t1", type="s1", timestamp=None)
+    raw_none = to_dict(p_none)
+    assert raw_none.get("timestamp") is None
+    restored_none = from_dict(TaskPayload, raw_none)
+    assert restored_none.timestamp is None
+
+    p_large = TaskPayload(job_id="j1", task_id="t1", type="s1", timestamp=2**62)
+    raw_large = to_dict(p_large)
+    assert raw_large["timestamp"] == 2**62
+    restored_large = from_dict(TaskPayload, raw_large)
+    assert restored_large.timestamp == 2**62

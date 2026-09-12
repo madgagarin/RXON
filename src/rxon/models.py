@@ -6,10 +6,9 @@
 from logging import getLogger
 from typing import Any
 
-from fastjsonschema import compile as compile_schema
 from msgspec import Struct
 
-from rxon.schema import translate_error, validate_data
+from rxon.schema import get_compiled_validator, translate_error, validate_data
 
 logger = getLogger(__name__)
 
@@ -189,38 +188,14 @@ class SkillInfo(Struct, omit_defaults=True, frozen=True):
     output_statuses: list[str] | None = None
     schema_dialect: str = "json-schema"
     properties: dict[str, Any] | None = None
-    _input_validator: Any = None
-    _output_validator: Any = None
 
     @property
     def input_validator(self) -> Any:
-        val = getattr(self, "_input_validator", None)
-        if val is None and self.input_schema:
-            try:
-                val = compile_schema(self.input_schema)
-                object.__setattr__(self, "_input_validator", val)
-            except Exception as e:
-                logger.warning(
-                    "Failed to compile input schema for skill '%s': %s",
-                    getattr(self, "name", "unknown"),
-                    e,
-                )
-        return val
+        return get_compiled_validator(self.input_schema, getattr(self, "name", "unknown"), "input")
 
     @property
     def output_validator(self) -> Any:
-        val = getattr(self, "_output_validator", None)
-        if val is None and self.output_schema:
-            try:
-                val = compile_schema(self.output_schema)
-                object.__setattr__(self, "_output_validator", val)
-            except Exception as e:
-                logger.warning(
-                    "Failed to compile output schema for skill '%s': %s",
-                    getattr(self, "name", "unknown"),
-                    e,
-                )
-        return val
+        return get_compiled_validator(self.output_schema, getattr(self, "name", "unknown"), "output")
 
     def matches(self, req: "SkillInfo") -> bool:
         """Checks if this skill meets the requirements."""
