@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+import inspect
 from collections.abc import Callable
 from enum import Enum
 from logging import getLogger
@@ -12,7 +14,7 @@ from re import match as re_match
 from re import sub as re_sub
 from threading import Lock
 from types import UnionType
-from typing import Any, Union, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, Union, get_args, get_origin, get_type_hints
 from uuid import UUID
 
 from fastjsonschema import JsonSchemaValueException
@@ -23,6 +25,20 @@ from orjson import OPT_SORT_KEYS
 from orjson import dumps as orjson_dumps
 
 logger = getLogger(__name__)
+
+
+class Header:
+    """Marker annotation for HTTP request headers in schemas."""
+
+    __slots__ = ("name", "default", "is_header")
+
+    def __init__(self, name: str, default: Any = ...):
+        self.name = name
+        self.default = default
+        self.is_header = True
+
+    def __repr__(self) -> str:
+        return f"Header({self.name!r})"
 
 
 def extract_json_schema(
@@ -38,6 +54,21 @@ def extract_json_schema(
         if custom_schema is not None:
             return custom_schema
 
+    # Duck typing for Pydantic v2
+    if hasattr(schema_type, "model_json_schema") and callable(schema_type.model_json_schema):
+        try:
+            return schema_type.model_json_schema()
+        except Exception:
+            pass
+
+    # Duck typing for Pydantic v1
+    if hasattr(schema_type, "schema") and callable(schema_type.schema):
+        try:
+            return schema_type.schema()
+        except Exception:
+            pass
+
+    # msgspec Struct
     if isinstance(schema_type, type) and issubclass(schema_type, Struct):
         properties = {}
         required = []
@@ -47,6 +78,27 @@ def extract_json_schema(
             properties[field_info.name] = _python_type_to_json_schema(field_info.type)
             if field_info.default is NODEFAULT and not _is_optional(field_info.type):
                 required.append(field_info.name)
+        return {
+            "type": "object",
+            "properties": properties,
+            "required": required,
+            "additionalProperties": False,
+        }
+
+    # dataclasses
+    if isinstance(schema_type, type) and dataclasses.is_dataclass(schema_type):
+        properties = {}
+        required = []
+        for f in dataclasses.fields(schema_type):
+            if f.name.startswith("_"):
+                continue
+            properties[f.name] = _python_type_to_json_schema(f.type)
+            if (
+                f.default is dataclasses.MISSING
+                and f.default_factory is dataclasses.MISSING
+                and not _is_optional(f.type)
+            ):
+                required.append(f.name)
         return {
             "type": "object",
             "properties": properties,
@@ -102,6 +154,25 @@ def _python_type_to_json_schema(tp: Any) -> dict[str, Any]:
 
     if origin is dict or tp is dict:
         return {"type": "object"}
+
+    if get_origin(tp) is Annotated:
+        return _python_type_to_json_schema(get_args(tp)[0])
+
+    if hasattr(tp, "model_json_schema") and callable(tp.model_json_schema):
+        try:
+            return tp.model_json_schema()
+        except Exception:
+            pass
+
+    if hasattr(tp, "schema") and callable(tp.schema):
+        try:
+            return tp.schema()
+        except Exception:
+            pass
+
+    if isinstance(tp, type) and dataclasses.is_dataclass(tp):
+        nested = extract_json_schema(tp)
+        return nested if nested else {"type": "object"}
 
     if isinstance(tp, type) and issubclass(tp, Struct):
         nested = extract_json_schema(tp)
@@ -255,6 +326,125 @@ def validate_data(data: Any, schema: dict[str, Any] | None) -> tuple[bool, str |
         return False, str(e)
 
 
+def extract_input_schema_from_func(
+    func: Any, extractor: Callable[[Any], dict[str, Any] | None] | None = None
+) -> dict[str, Any] | None:
+    """Extracts input JSON schema from a handler's signature.
+
+    Supports arbitrary parameter names, Pydantic models, msgspec Structs,
+    dataclasses, scalars, and composite multi-parameter signatures.
+    Framework arguments (ctx, context, task_files, actions, self, cls) and Header(...)
+    annotated parameters are automatically excluded.
+    """
+    if not callable(func):
+        return None
+
+    try:
+        sig = inspect.signature(func)
+    except Exception:
+        return None
+
+    try:
+        hints = get_type_hints(func, include_extras=True)
+    except Exception:
+        try:
+            hints = get_type_hints(func)
+        except Exception:
+            hints = {}
+
+    system_param_names = {
+        "ctx",
+        "context",
+        "task_files",
+        "actions",
+        "self",
+        "cls",
+        "job_id",
+        "current_state",
+        "state",
+        "data_stores",
+        "client",
+    }
+    business_params: list[tuple[str, inspect.Parameter, Any]] = []
+
+    for name, param in sig.parameters.items():
+        if name in system_param_names:
+            continue
+
+        if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+            continue
+
+        ann = hints.get(name, param.annotation)
+
+        if get_origin(ann) is Annotated:
+            meta_args = get_args(ann)[1:]
+            if any(
+                getattr(m, "__class__", type(m)).__name__ == "Header"
+                or getattr(m, "is_header", False)
+                for m in meta_args
+            ):
+                continue
+
+        business_params.append((name, param, ann))
+
+    if not business_params:
+        return None
+
+    def _is_structured_model(tp: Any) -> bool:
+        if get_origin(tp) is Annotated:
+            tp = get_args(tp)[0]
+        if not isinstance(tp, type):
+            return False
+        return (
+            issubclass(tp, Struct)
+            or hasattr(tp, "model_json_schema")
+            or hasattr(tp, "schema")
+            or dataclasses.is_dataclass(tp)
+        )
+
+    # 1 parameter
+    if len(business_params) == 1:
+        name, param, ann = business_params[0]
+        if name in ("initial_data", "input") and (
+            ann is inspect.Parameter.empty or ann is Any or ann is dict or get_origin(ann) is dict
+        ):
+            return None
+
+        actual_type = get_args(ann)[0] if get_origin(ann) is Annotated else ann
+
+        if _is_structured_model(actual_type):
+            return extract_json_schema(actual_type, extractor=extractor)
+
+        prop_schema = extract_json_schema(ann, extractor=extractor) or {"type": "string"}
+        required = [name] if param.default == inspect.Parameter.empty else []
+        return {
+            "type": "object",
+            "properties": {name: prop_schema},
+            "required": required,
+            "additionalProperties": False,
+        }
+
+    # >= 2 parameters: composite schema
+    properties = {}
+    required = []
+    for name, param, ann in business_params:
+        actual_type = get_args(ann)[0] if get_origin(ann) is Annotated else ann
+        if actual_type is inspect.Parameter.empty or actual_type is Any:
+            prop_schema = {}
+        else:
+            prop_schema = extract_json_schema(actual_type, extractor=extractor) or {}
+        properties[name] = prop_schema
+        if param.default == inspect.Parameter.empty:
+            required.append(name)
+
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False,
+    }
+
+
 def extract_schema_from_func(
     func: Any, arg_name: str, extractor: Callable[[Any], dict[str, Any] | None] | None = None
 ) -> dict[str, Any] | None:
@@ -274,10 +464,11 @@ def extract_output_schema_from_func(
     try:
         hints = get_type_hints(func)
         return_hint = hints.get("return")
-        if return_hint:
-            if get_origin(return_hint) is dict or return_hint is dict:
-                return None
-            return extract_json_schema(return_hint, extractor=extractor)
+        if return_hint is None or return_hint is type(None):
+            return None
+        if get_origin(return_hint) is dict or return_hint is dict:
+            return None
+        return extract_json_schema(return_hint, extractor=extractor)
     except Exception:
         pass
     return None
@@ -296,7 +487,9 @@ def extract_skill_contract(
                     start_handler = ch.func
                     break
         if start_handler:
-            input_schema = extract_schema_from_func(start_handler, "initial_data", extractor=extractor)
+            input_schema = extract_input_schema_from_func(start_handler, extractor=extractor)
+            if input_schema is None:
+                input_schema = extract_schema_from_func(start_handler, "initial_data", extractor=extractor)
 
     end_schemas = []
     if hasattr(blueprint, "end_states"):

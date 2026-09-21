@@ -18,7 +18,8 @@ In traditional networks, commands usually flow "top-down" (Push model). In **RXO
 
 - **Reverse Connection (PULL)**: Nodes connect to the orchestrator to pull tasks, ensuring compatibility with complex network environments (NAT/Firewalls).
 - **Zero Trust Security**: Payload signing via HMAC-SHA256 (symmetric) and Ed25519 (asymmetric digital signatures) with constant-time verification. Support for signed bubbling chains, mTLS certificate identity extraction, and `sig` (`orchestrator_signature`) task verification.
-- **Policy & Cost Headers**: Built-in support for job policy constraints (`policy`), holarchy depth tracking (`depth`), transition step counters (`step`), parent hash linkage (`parent_hash`), and task execution cost reporting (`costs`).
+- **Policy & Cost Headers**: Built-in support for job policy constraints (`policy`), holarchy depth tracking (`depth`), transition step counters (`step`), parent hash linkage (`parent_hash`), task execution cost reporting (`costs`), risk categorization (`risk`), and permission grants (`permissions`).
+- **AI Governance & Receipts**: Standardized `ExecutionReceipt` schema tracking advisory routing decisions, candidate states, fallback triggers, and decision latencies.
 - **Deep Model Restoration**: Robust `from_dict` utility powered by `msgspec.convert` that recursively restores complex Python types (msgspec.Structs, Enums, UUIDs, datetimes) from raw dictionaries, supporting nested structures and `Union` types.
 - **Secure Serialization**: `to_dict` utility that recursively strips `None` values to reduce payload size and normalizes `float` values (e.g., `1.0` -> `1`) to ensure stable cryptographic hashes.
 - **Automated Contract Validation**: Built-in JSON Schema engine that automatically infers schemas from Python types and validates `TaskPayload` parameters against `SkillInfo` contracts.
@@ -34,8 +35,8 @@ In traditional networks, commands usually flow "top-down" (Push model). In **RXO
 RXON is the foundational protocol powering the distributed multi-agent automation stack:
 
 - **[HLN (Holarchical Logic Network)](https://github.com/madgagarin/hln)**: The architectural pattern, manifesto, and design specification for self-similar holarchies.
-- **[Avtomatika](https://github.com/avtomatika-ai/avtomatika)**: High-performance state-machine based orchestrator for long-running AI workflows and distributed execution.
-- **[Avtomatika Worker SDK](https://github.com/avtomatika-ai/avtomatika-worker)**: The official Python SDK for building autonomous workers (Holons) that connect to orchestrators via RXON.
+- **[Shellspirit](https://github.com/madgagarin/shellspirit)**: High-performance state-machine based orchestrator for long-running AI workflows and distributed execution.
+- **[Shellnode SDK](https://github.com/madgagarin/shellnode)**: The official Python SDK for building autonomous workers (Holons) that connect to orchestrators via RXON.
 
 ## 🏗 Architecture & Logic
 

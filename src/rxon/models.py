@@ -188,6 +188,8 @@ class SkillInfo(Struct, omit_defaults=True, frozen=True):
     output_statuses: list[str] | None = None
     schema_dialect: str = "json-schema"
     properties: dict[str, Any] | None = None
+    risk: str = "low"
+    permissions: list[str] | None = None
 
     @property
     def input_validator(self) -> Any:
@@ -196,6 +198,18 @@ class SkillInfo(Struct, omit_defaults=True, frozen=True):
     @property
     def output_validator(self) -> Any:
         return get_compiled_validator(self.output_schema, getattr(self, "name", "unknown"), "output")
+
+    def to_index(self) -> dict[str, Any]:
+        """Returns a lightweight summary of the skill without heavy schemas."""
+        return {
+            "name": self.name,
+            "type": self.type,
+            "description": self.description,
+            "version": self.version,
+            "risk": getattr(self, "risk", "low"),
+            "permissions": getattr(self, "permissions", None) or [],
+            "schema_dialect": self.schema_dialect,
+        }
 
     def matches(self, req: "SkillInfo") -> bool:
         """Checks if this skill meets the requirements."""
@@ -209,6 +223,25 @@ class SkillInfo(Struct, omit_defaults=True, frozen=True):
         if not isinstance(other, SkillInfo):
             return NotImplemented
         return self.name < other.name
+
+
+class ExecutionReceipt(Struct, omit_defaults=True, frozen=True):
+    """Receipt for advisory decision routing and offline replay."""
+
+    correlation_id: str
+    step: str
+    candidates: list[str]
+    chosen: str
+    fallback_triggered: bool = False
+    duration_ms: int = 0
+    error_message: str | None = None
+    receipt_hash: str | None = None
+    decider_name: str | None = None
+    fallback: str | None = None
+    reason: str | None = None
+    context_snapshot: dict[str, Any] | None = None
+    job_id: str | None = None
+    error: str | None = None
 
 
 class SecurityContext(Struct, omit_defaults=True, frozen=True):

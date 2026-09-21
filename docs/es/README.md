@@ -18,7 +18,8 @@ En las redes tradicionales, los comandos suelen fluir "de arriba hacia abajo" (m
 
 - **Conexión Inversa (PULL)**: Los nodos se conectan al orquestador para obtener tareas, asegurando la compatibilidad con entornos de red complejos (NAT/Firewalls).
 - **Seguridad Zero Trust**: Firma de carga útil a través de HMAC-SHA256 (simétrico) y Ed25519 (firmas digitales asimétricas) con verificación en tiempo constante. Soporte para bubbling chains firmadas, extracción de identidad de certificados mTLS y verificación de firma digital de tareas `sig` (`orchestrator_signature`).
-- **Encabezados de Políticas y Costos**: Soporte integrado para restricciones de políticas de trabajo (`policy`), seguimiento de profundidad de holarquía (`depth`), contadores de pasos de transición (`step`), vinculación de hash primario (`parent_hash`) e informes de costos de ejecución de tareas (`costs`).
+- **Encabezados de Políticas y Costos**: Soporte integrado para restricciones de políticas de trabajo (`policy`), seguimiento de profundidad de holarquía (`depth`), contadores de pasos de transición (`step`), vinculación de hash primario (`parent_hash`), informes de costos de ejecución de tareas (`costs`), niveles de riesgo (`risk`) y permisos (`permissions`).
+- **Gobernanza de IA y Comprobantes de Ejecución**: Esquema estandarizado `ExecutionReceipt` para auditar decisiones de enrutamiento consultivo, candidatos, activaciones de fallback y latencias.
 - **Restauración Profunda de Modelos**: Utilidad `from_dict` robusta potenciada por `msgspec.convert` que restaura recursivamente tipos complejos de Python (`msgspec.Struct`, `Enum`, `UUID`, `datetime`) a partir de diccionarios, soportando estructuras anidadas y tipos `Union`.
 - **Serialización Segura**: Utilidad `to_dict` que elimina recursivamente los valores `None` para reducir el tamaño y normaliza los valores `float` (ej. `1.0` -> `1`), asegurando la estabilidad de los hashes criptográficos.
 - **Validación Automatizada de Contratos**: Motor JSON Schema integrado que infiere automáticamente los esquemas a partir de los tipos de Python y valida los parámetros de `TaskPayload` contra los contratos de `SkillInfo`.
@@ -34,8 +35,8 @@ En las redes tradicionales, los comandos suelen fluir "de arriba hacia abajo" (m
 RXON es el protocolo fundamental que impulsa la pila de automatización multi-agente distribuida:
 
 - **[HLN (Holarchical Logic Network)](https://github.com/madgagarin/hln)**: El patrón arquitectónico, manifiesto y especificación para holarquías autosimilares.
-- **[Avtomatika](https://github.com/avtomatika-ai/avtomatika)**: Motor orquestador basado en máquinas de estados de alto rendimiento para flujos de trabajo de IA distribuidos.
-- **[Avtomatika Worker SDK](https://github.com/avtomatika-ai/avtomatika-worker)**: SDK oficial de Python para construir trabajadores autónomos (holones) que se conectan a los orquestadores a través de RXON.
+- **[Shellspirit](https://github.com/madgagarin/shellspirit)**: Motor orquestador basado en máquinas de estados de alto rendimiento para flujos de trabajo de IA distribuidos.
+- **[Shellnode SDK](https://github.com/madgagarin/shellnode)**: SDK oficial de Python para construir trabajadores autónomos (holones) que se conectan a los orquestadores a través de RXON.
 
 ## 🏗 Arquitectura y Lógica
 
