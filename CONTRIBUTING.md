@@ -1,27 +1,29 @@
-# CONTRIBUTING.md
+# Contributing to RXON
 
 **EN** | [ES](https://github.com/madgagarin/rxon/blob/main/docs/es/CONTRIBUTING.md) | [RU](https://github.com/madgagarin/rxon/blob/main/docs/ru/CONTRIBUTING.md)
 
-As the shared protocol layer, changes here affect the entire ecosystem. Please be extra careful.
+As the shared protocol layer, changes in this repository affect downstream libraries.
 
 ## Setup
 
-1.  Clone the repository and navigate to this directory.
-2.  Install in editable mode:
-    ```bash
-    pip install -e .[dev]
-    ```
+1. Clone the repository and navigate to the project directory.
+2. Install with development dependencies:
+   ```bash
+   pip install -e .[dev]
+   ```
 
-## Testing
+## Testing & Quality Checks
 
-Run tests to ensure protocol integrity:
+Run test suite and static analysis:
 
 ```bash
 pytest tests/
+ruff check .
+mypy src tests
 ```
 
 ## Guidelines
 
-- **Breaking Changes**: Any change to `rxon.models` is potentially a breaking change. Consult with the maintainers before submitting.
-- **Dependencies**: Keep the core dependency-free. Network-heavy code should go into `rxon.transports`.
-- **Typing**: Static typing is strictly required for all protocol models.
+- **Breaking Changes**: Changes to `rxon.models` may introduce breaking wire incompatibilities. Discuss proposed changes before submitting.
+- **Dependencies**: Keep the core lightweight and avoid introducing heavy runtime dependencies.
+- **Typing**: Strict static typing is required for all models and public functions.

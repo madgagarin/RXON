@@ -6,97 +6,87 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![PyPI version](https://img.shields.io/pypi/v/rxon.svg)](https://pypi.org/project/rxon/)
 
-**RXON** (Reverse Axon) es un protocolo de conexión inversa ligero y extensible diseñado para arquitecturas **[HLN (Holarchical Logic Network)](https://github.com/madgagarin/hln)**.
+**RXON** (Reverse Axon) es un protocolo ligero para conexiones inversas, distribución de tareas y comunicación tipificada entre servicios en arquitecturas **[HLN (Holarchical Logic Network)](https://github.com/madgagarin/hln)**.
 
-Sirve como el "sistema nervioso" para sistemas multi-agente distribuidos, proporcionando una base Zero Trust estrictamente tipificada para la comunicación entre servicios.
+Proporciona modelos de mensajes estrictamente tipificados y verificación Zero Trust para entornos de agentes distribuidos.
 
-## 🚀 Concepto
+## Concepto
 
-En las redes tradicionales, los comandos suelen fluir "de arriba hacia abajo" (modelo Push). En **RXON**, la iniciativa de conexión siempre proviene del nodo subordinado (Shell) al nodo superior (Orchestrator). Esta arquitectura de "Axón Inverso" permite que los trabajadores operen detrás de NAT o Firewalls sin una configuración de red compleja, manteniendo un canal de control bidireccional seguro.
+En las arquitecturas cliente-servidor convencionales, el plano de control envía solicitudes hacia los nodos de trabajo (Push). En **RXON**, el nodo subordinado (shell / trabajador) inicia conexiones salientes hacia el orquestador para consultar tareas (Pull). Este patrón de conexión inversa permite que los trabajadores operen detrás de cortafuegos y NAT sin redirección de puertos entrantes, manteniendo un canal de comunicación bidireccional.
 
-## ✨ Características Principales
+## Características Principales
 
-- **Conexión Inversa (PULL)**: Los nodos se conectan al orquestador para obtener tareas, asegurando la compatibilidad con entornos de red complejos (NAT/Firewalls).
-- **Seguridad Zero Trust**: Firma de carga útil a través de HMAC-SHA256 (simétrico) y Ed25519 (firmas digitales asimétricas) con verificación en tiempo constante. Soporte para bubbling chains firmadas, extracción de identidad de certificados mTLS y verificación de firma digital de tareas `sig` (`orchestrator_signature`).
-- **Encabezados de Políticas y Costos**: Soporte integrado para restricciones de políticas de trabajo (`policy`), seguimiento de profundidad de holarquía (`depth`), contadores de pasos de transición (`step`), vinculación de hash primario (`parent_hash`), informes de costos de ejecución de tareas (`costs`), niveles de riesgo (`risk`) y permisos (`permissions`).
-- **Gobernanza de IA y Comprobantes de Ejecución**: Esquema estandarizado `ExecutionReceipt` para auditar decisiones de enrutamiento consultivo, candidatos, activaciones de fallback y latencias.
-- **Restauración Profunda de Modelos**: Utilidad `from_dict` robusta potenciada por `msgspec.convert` que restaura recursivamente tipos complejos de Python (`msgspec.Struct`, `Enum`, `UUID`, `datetime`) a partir de diccionarios, soportando estructuras anidadas y tipos `Union`.
-- **Serialización Segura**: Utilidad `to_dict` que elimina recursivamente los valores `None` para reducir el tamaño y normaliza los valores `float` (ej. `1.0` -> `1`), asegurando la estabilidad de los hashes criptográficos.
-- **Validación Automatizada de Contratos**: Motor JSON Schema integrado que infiere automáticamente los esquemas a partir de los tipos de Python y valida los parámetros de `TaskPayload` contra los contratos de `SkillInfo`.
-- **Coincidencia de Recursos Avanzada**: Lógica matemática para la asignación de recursos:
-  - **Números**: Utiliza la lógica **GE (Greater or Equal)** (Requisito <= Disponible).
-  - **Listas**: Utiliza la lógica de **Inclusión** (valor en la lista) o **Intersección** (cualquier elemento común).
-  - **Cadenas**: Coincidencia parcial de modelos de hardware sin distinción de mayúsculas y minúsculas.
-- **Telemetría Universal**: Los heartbeats incluyen métricas detalladas para cualquier dispositivo personalizado (sensores, GPUs, actuadores) y propiedades del sistema genéricas a través del modelo extensible `HardwareDevice`.
-- **Transporte Resiliente**: Implementación HTTP/WebSocket con Secure Token Service (STS) que soporta **Refresh Tokens**, backoff exponencial para reconexiones y manejo nativo de **Rate Limit (HTTP 429)** con soporte para `Retry-After`.
+- **Conexión inversa (modelo Pull)**: los nodos de trabajo inician conexiones salientes al orquestador para recibir tareas, facilitando despliegues tras NAT y cortafuegos.
+- **Verificación Zero Trust**: firma de mensajes con HMAC-SHA256 (simétrica) y Ed25519 (asimétrica), verificación en tiempo constante, seguimiento de cadenas de llamadas (`bubbling_chain`) y firma de tareas (`sig`).
+- **Contexto de políticas y telemetría**: soporte para restricciones de ejecución (`policy`), profundidad en la holarquía (`depth`), contador de pasos de ejecución (`step`), enlace criptográfico con evento primario (`parent_hash`), informe de costos (`costs`), niveles de riesgo (`risk`) y permisos requeridos (`permissions`).
+- **Comprobantes de ejecución (`ExecutionReceipt`)**: esquema para registrar decisiones de enrutamiento consultivo, candidatos evaluados, activación de alternativas (fallback) y latencia de decisión.
+- **Inferencia y validación de esquemas**: genera esquemas JSON a partir de firmas de funciones Python (`msgspec.Struct`, `dataclass`, modelos compatibles con `model_json_schema`, tipos primitivos). Caché LRU segura para hilos con límite de tamaño (hasta 2048 entradas).
+- **Serialización determinista**: `to_dict` normaliza números de coma flotante (`1.0` -> `1`), descarta valores `None` y ordena claves mediante `orjson` para garantizar hashes criptográficos reproducibles.
+- **Conversión de modelos**: utilidad `from_dict` basada en `msgspec` para convertir diccionarios en estructuras tipificadas (`Struct`, `dataclass`, `Enum`, `UUID`, `datetime`).
+- **Coincidencia de recursos**: empareja dispositivos de hardware y recursos de trabajadores con los requisitos de la tarea mediante reglas de comparación numérica («mayor o igual») e inclusión/intersección de conjuntos.
+- **Transporte resiliente**: clientes WebSocket y sondeo HTTP con renovación de tokens, retroceso exponencial y manejo de HTTP 429 (`Retry-After`).
 
-## 🌐 Ecosistema
+## Ecosistema
 
-RXON es el protocolo fundamental que impulsa la pila de automatización multi-agente distribuida:
+RXON es el protocolo base para la pila de automatización multi-agente distribuida:
 
-- **[HLN (Holarchical Logic Network)](https://github.com/madgagarin/hln)**: El patrón arquitectónico, manifiesto y especificación para holarquías autosimilares.
-- **[Shellspirit](https://github.com/madgagarin/shellspirit)**: Motor orquestador basado en máquinas de estados de alto rendimiento para flujos de trabajo de IA distribuidos.
-- **[Shellnode SDK](https://github.com/madgagarin/shellnode)**: SDK oficial de Python para construir trabajadores autónomos (holones) que se conectan a los orquestadores a través de RXON.
+- **[HLN (Holarchical Logic Network)](https://github.com/madgagarin/hln)**: arquitectura y especificación para holarquías autosimilares.
+- **[Shellspirit](https://github.com/madgagarin/shellspirit)**: orquestador basado en máquinas de estados para flujos de trabajo de IA distribuidos.
+- **[Shellnode](https://github.com/madgagarin/shellnode)**: SDK de Python para construir trabajadores autónomos (holones) conectados a orquestadores por RXON.
 
-## 🏗 Arquitectura y Lógica
+## Arquitectura y Lógica
 
-### Validación y Normalización Interna
+### Integridad de Datos y Validación
 
-La biblioteca garantiza la integridad de los datos en varios niveles:
+1. **Estabilidad de serialización**: `orjson` genera JSON canónico: los números de coma flotante enteros se normalizan (`10.0` -> `10`), las claves de diccionario se ordenan y se convierten en cadenas. Esto asegura que cargas útiles equivalentes generen hashes idénticos.
+2. **Soporte de tipos**: soporte directo para `msgspec.Struct`, bibliotecas estándar `dataclass`, `datetime`, `UUID`, `Enum` y modelos que implementen `model_json_schema()` o `schema()`.
+3. **Límite de profundidad de recursión**: el recorrido recursivo está acotado a 30 niveles para proteger contra desbordamientos de pila en estructuras cíclicas o excesivamente anidadas.
+4. **Validación de esquemas**: los esquemas JSON se compilan y conservan en memoria. Antes de ejecutar una tarea, los parámetros pueden validarse contra el esquema de entrada de la habilidad para rechazar anomalías tempranamente.
 
-1.  **Estabilidad de Serialización**: RXON utiliza un mecanismo de **JSON Round-trip** con `orjson` para normalizar todos los tipos numéricos (`10.0` -> `10`), forzar las claves de los diccionarios a cadenas y ordenar las claves. Esto asegura que el mismo objeto siempre produzca exactamente el mismo hash HMAC independientemente de pequeñas diferencias de formato.
-2.  **Soporte Completo de Tipos**: El soporte nativo para `datetime`, `UUID`, `Enum` y modelos **Pydantic** asegura una integración fluida con los ecosistemas modernos de Python manteniendo la consistencia criptográfica.
-3.  **Protección de Recurrencia**: Todas las operaciones recursivas están limitadas a una profundidad de 30 para evitar el desbordamiento de pila o ataques DoS a través de datos maliciosos.
-4.  **Cumplimiento de Esquemas**: Compilación rápida de JSON Schema con almacenamiento en caché seguro para subprocesos (`SkillInfo.input_validator`, `SkillInfo.output_validator`). Antes de la ejecución de la tarea, la biblioteca valida los parámetros de entrada contra el JSON Schema de la habilidad, verificando los campos obligatorios, la corrección de tipos y los valores permitidos (Enums).
+### Coincidencia de Recursos
 
-### Lógica de Coincidencia Inteligente (Smart Matching)
+RXON define reglas declarativas de asignación de tareas a trabajadores:
 
-RXON formaliza las reglas para emparejar tareas con holones:
+1. **Dispositivos de hardware**: evalúa propiedades en `HardwareDevice`. Las propiedades numéricas usan la lógica «mayor o igual» (ej. `vram_gb: 16` coincide con `vram_gb >= 16`).
+2. **Propiedades generales**: atributos escalares en el diccionario `properties` usan la misma regla numérica.
+3. **Conjuntos de capacidades**: cuando los requisitos especifican una colección de valores admitidos (ej. `["linux", "darwin"]`), se comprueba pertenencia o intersección no vacía de conjuntos.
 
-1.  **Coincidencia de Hardware**: Compara las propiedades de `HardwareDevice`. Si una tarea requiere `vram_gb: 16`, coincidirá con cualquier dispositivo con `vram_gb >= 16`.
-2.  **Propiedades de Recursos**: Los recursos genéricos (como la RAM o los núcleos de CPU) se comparan a través del diccionario `properties` utilizando la misma lógica GE.
-3.  **Intersección de Capacidades**: Si una tarea acepta múltiples entornos (ej. `["linux", "darwin"]`), un trabajador con `linux` coincidirá correctamente.
+### Contexto de Ejecución y Gobernanza
 
-### Seguimiento de Políticas, Holarquía y Costos
+- **Restricciones de política (`policy`)**: diccionario con directivas de ejecución (habilidades permitidas, límites de tokens, presupuesto).
+- **Jerarquía de llamadas (`depth`, `step`, `parent_hash`)**: registra profundidad de llamadas (`depth`), número de paso en el flujo (`step`) y hash del evento primario (`parent_hash`).
+- **Firma de tarea (`sig`)**: firma HMAC-SHA256 generada por el orquestador con `ORCHESTRATOR_SECRET_KEY` y validada por el trabajador antes de ejecutar.
+- **Marca de tiempo (`timestamp`)**: marca de tiempo Unix entera en segundos (`int`) para evitar discrepancias de precisión flotante.
+- **Informe de costos (`costs`)**: campo `TaskResult.costs` para reportar métricas de recursos consumidos (tokens, tiempo de cómputo, importe).
 
-RXON estandariza la gobernanza de ejecución y el seguimiento de métricas en holones distribuidos:
+## Códigos de Error Estándar
 
-- **Restricciones de Política (`policy`)**: Diccionario que contiene reglas de ejecución (habilidades permitidas, límites de tokens, presupuesto).
-- **Contadores de Holarquía y Pasos (`depth`, `step`, `parent_hash`)**: Seguimiento de la profundidad de anidamiento (`depth`), índice de paso de transición (`step`) y enlace criptográfico con el evento primario (`parent_hash`).
-- **Firma de Tarea (`sig`)**: Firma criptográfica HMAC-SHA256 de la tarea generada por el orquestador (`ORCHESTRATOR_SECRET_KEY`) y verificada por el trabajador.
-- **Marca de tiempo (`timestamp`)**: Marca de tiempo Unix entera en segundos (`int`), garantizando la estabilidad multiplataforma y evitando la desviación de precisión flotante.
-- **Informe de Costos (`costs`)**: Campo `TaskResult.costs` para reportar métricas de recursos consumidos (tokens, costo en USD, tiempo de CPU/GPU, por ejemplo `{"tokens": 1500, "usd": 0.02}`).
+- `CONTRACT_VIOLATION_ERROR`: los datos no se ajustan al esquema esperado.
+- `SECURITY_ERROR`: fallo de autenticación, token expirado o firma incorrecta.
+- `RESOURCE_EXHAUSTED_ERROR`: recursos de cómputo, memoria o GPU insuficientes.
+- `DEPENDENCY_ERROR`: un servicio, trabajador o artefacto necesario no está disponible.
 
-## 🛡️ Manejo de Errores
+## Inicio Rápido
 
-RXON define un conjunto de códigos de error estandarizados para asegurar un comportamiento consistente:
-
-- `CONTRACT_VIOLATION_ERROR`: Los datos no coinciden con el esquema negociado.
-- `SECURITY_ERROR`: Error de autenticación o verificación de firma.
-- `RESOURCE_EXHAUSTED_ERROR`: Recursos físicos insuficientes (RAM, VRAM).
-- `DEPENDENCY_ERROR`: Un servicio o artefacto requerido no está disponible.
-
-## 🧪 Inicio Rápido
-
-### Lado del Trabajador (PULL)
+### Lado del Trabajador (Pull)
 
 ```python
 from rxon import create_transport
-from rxon.models import Resources, HardwareDevice
+from rxon.models import HardwareDevice, Resources
 
-# 1. Crear transporte (soporta http, https, ws, wss)
+# 1. Inicializar transporte (soporta http, https, ws, wss)
 transport = create_transport("ws://api.hln.local", "worker-01", "secret-token")
 
-# 2. Definir recursos del trabajador
+# 2. Declarar recursos del trabajador
 my_res = Resources(
     properties={"ram_gb": 64, "cpu_cores": 16},
     devices=[HardwareDevice(type="gpu", model="RTX 4090", properties={"vram_gb": 24})],
 )
 
-# 3. Lógica de coincidencia (Requisito: GPU con al menos 16GB VRAM)
+# 3. Comprobar requisitos de la tarea (ej. GPU con al menos 16GB VRAM)
 req = Resources(devices=[HardwareDevice(type="gpu", properties={"vram_gb": 16})])
 if my_res.matches(req):
-    print("¡Este holón está listo para la tarea!")
+    print("El trabajador cumple con los requisitos")
 ```
 
 ### Lado del Orquestador (Servidor)
@@ -108,7 +98,7 @@ from rxon import HttpListener
 app = web.Application()
 listener = HttpListener(app)
 
-# OBLIGATORIO: Registrar rutas RXON antes del inicio de la aplicación
+# Registrar rutas RXON antes de iniciar la aplicación
 listener.setup_routes()
 
 
@@ -118,13 +108,12 @@ async def my_handler(action, payload, context):
     return {"status": "ok"}
 
 
-# Iniciar escucha
 await listener.start(handler=my_handler)
 ```
 
-## 📜 Licencia
+## Licencia
 
-El proyecto se distribuye bajo la licencia Mozilla Public License 2.0 (MPL 2.0).
+Este proyecto se distribuye bajo la licencia Mozilla Public License 2.0 (MPL 2.0).
 
 ---
 

@@ -92,7 +92,7 @@ def sign_payload_ed25519(payload: Any, private_key_pem: str, ignore_fields: list
         raise TypeError("Key is not an Ed25519 private key.")
 
     signature = private_key.sign(message)
-    return signature.hex()
+    return cast(str, signature.hex())
 
 
 def verify_signature_ed25519(
@@ -135,7 +135,7 @@ def sign_bubbling_chain(bubbling_chain: list[str], private_key_pem: str) -> str:
         raise TypeError("Key is not an Ed25519 private key.")
 
     signature = private_key.sign(message)
-    return signature.hex()
+    return cast(str, signature.hex())
 
 
 def verify_bubbling_chain_signature(bubbling_chain: list[str], signature_hex: str, public_key_pem: str) -> bool:

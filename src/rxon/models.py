@@ -22,6 +22,7 @@ __all__ = [
     "WorkerCapabilities",
     "FileMetadata",
     "SecurityContext",
+    "ExecutionReceipt",
     "WorkerRegistration",
     "TokenResponse",
     "WorkerEventPayload",
@@ -255,7 +256,7 @@ class SecurityContext(Struct, omit_defaults=True, frozen=True):
 
 class WorkerCapabilities(Struct, omit_defaults=True, frozen=True):
     hostname: str = "unknown"
-    ip_address: str = "0.0.0.0"
+    ip_address: str = "0.0.0.0"  # nosec B104
     cost_per_skill: dict[str, float] | None = None
     s3_config_hash: str | None = None
     extra: dict[str, Any] | None = None

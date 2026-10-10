@@ -1,47 +1,50 @@
-# SECURITY.md
+# Security Policy
 
 **EN** | [ES](https://github.com/madgagarin/rxon/blob/main/docs/es/SECURITY.md) | [RU](https://github.com/madgagarin/rxon/blob/main/docs/ru/SECURITY.md)
 
 ## Reporting a Vulnerability
 
-Please report any vulnerabilities in the RXON protocol library to [madgagarin@gmail.com].
+Please report security issues or vulnerabilities to [madgagarin@gmail.com].
 
-## Core Principles
+## Security Architecture
 
-RXON is designed to be the secure "nerve system" of the Hierarchical Logic Network (HLN). It enforces:
+RXON enforces security boundaries for distributed execution across HLN networks:
 
-### 🔐 Digital Signatures and HMAC
+### Digital Signatures and HMAC
 
-The protocol supports message signing via HMAC-SHA256 (symmetric) and Ed25519 (asymmetric digital signatures) (the `security.signature` field). This ensures:
+The protocol supports payload signing via HMAC-SHA256 (symmetric) and Ed25519 (asymmetric) (`security.signature`):
 
-- **Integrity**: Messages cannot be altered in transit.
-- **Authenticity**: Only a worker with the secret token can send data.
-- **Stable Serialization**: The **JSON Round-trip** mechanism ensures that the same data always produces the same byte sequence for signature verification.
+- **Integrity**: Payloads cannot be altered in transit.
+- **Authenticity**: Only endpoints holding valid signing keys or shared secrets can emit authoritative commands or results.
+- **Canonical serialization**: Canonical JSON encoding via `orjson` ensures identical byte sequences for signature verification.
 
-### ⏱️ Replay Protection
+### Replay Protection
 
-Every signed message must include an integer `timestamp`. The Orchestrator rejects messages that:
+Signed payloads require an integer `timestamp`. The orchestrator rejects messages that:
 
-- Are older than 60 seconds (default).
-- Contain a time from the future.
-- Re-use an already processed `event_id` or `task_id` within the validity window.
+- Are older than the configured time window (60 seconds by default).
+- Contain timestamps set in the future beyond allowed drift.
+- Replay an already processed `event_id` or `task_id` within the active validity window.
 
-### 🛡️ Zero Trust Identity Chain
+### Identity and Call Chains
 
-Every event emitted from a subordinate node includes an `origin_worker_id` and a `bubbling_chain`. This prevents spoofing and allows the Orchestrator to audit the entire path of a signal through the holarchy. The HMAC signature covers the entire message, including the chain, making identity spoofing mathematically impossible without the secret key.
+Events emitted from subordinate nodes contain `origin_worker_id` and `bubbling_chain`. The cryptographic signature covers the message payload and call hierarchy, preventing identity spoofing without access to the secret key.
 
-### 📝 Formal Interface Contracts
+### Interface Contracts and Schema Validation
 
-All communication (Registration, Heartbeats, Skills) is strictly validated against JSON Schemas. This prevents injection attacks and ensures that malformed data is rejected before it reaches the execution engine.
+Protocol messages (worker registration, heartbeats, skill definitions, task payloads) are validated against JSON Schemas:
 
-### 🧬 Reverse Connection (Axon Flow)
+- Input and output schemas use `additionalProperties: False` to reject unknown fields and prevent state injection.
+- Invalid payloads are rejected before task execution begins.
 
-Initiative always comes from the subordinate node (Worker/Shell). This eliminates the need for open incoming ports on workers, making them invisible to external network scans and direct attacks.
+### Reverse Connection Model
 
-### ⏳ Task Ownership & Deadlines
+Connections are established outbound from worker nodes to orchestrators. Workers do not expose public listening ports, reducing attack surface against unsolicited inbound traffic.
 
-Results are only accepted from the worker currently assigned to the task. Built-in `deadline` fields prevent the processing of stale tasks and mitigate certain types of replay or delay attacks.
+### Task Assignment and Deadlines
 
-### 📊 Resource-Aware Telemetry
+Task execution results are validated against the worker assigned to the task ID. Optional `deadline` timestamps enforce execution timeouts and prevent late processing of stale jobs.
 
-Granular resource reporting in Heartbeats allows Orchestrators to detect and mitigate resource exhaustion (DoS) before it causes a system-wide failure.
+### Resource Telemetry
+
+Heartbeat telemetry reports memory, GPU, and CPU utilization, allowing orchestrators to detect overload conditions and route tasks away from saturated nodes.

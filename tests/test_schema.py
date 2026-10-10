@@ -127,16 +127,25 @@ def test_validate_nested_negative() -> None:
 
 
 def test_extract_from_func() -> None:
-    def my_skill(initial_data: SimpleConfig) -> NTConfig:
+    def my_skill(input: SimpleConfig) -> NTConfig:
         return NTConfig(name="dummy")
 
-    input_schema = extract_schema_from_func(my_skill, "initial_data")
+    input_schema = extract_schema_from_func(my_skill, "input")
     assert input_schema is not None
     assert input_schema["properties"]["enabled"] == {"type": "boolean"}
 
     output_schema = extract_output_schema_from_func(my_skill)
     assert output_schema is not None
     assert output_schema["properties"]["name"] == {"type": "string"}
+
+
+def test_extract_from_func_legacy_initial_data() -> None:
+    def my_skill_legacy(initial_data: SimpleConfig) -> NTConfig:
+        return NTConfig(name="dummy")
+
+    input_schema = extract_schema_from_func(my_skill_legacy, "initial_data")
+    assert input_schema is not None
+    assert input_schema["properties"]["enabled"] == {"type": "boolean"}
 
 
 def test_extract_json_schema_enum() -> None:

@@ -13,12 +13,14 @@ authors = [
 ]
 license = "MPL-2.0"
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
 ]
 dependencies = [
     "aiohttp>=3.14.0",
@@ -35,6 +37,7 @@ dev = [
     "pytest-asyncio~=1.4.0",
     "pytest-cov~=7.1.0",
     "ruff",
+    "mutmut>=3.8.0",
 ]
 
 [project.urls]
@@ -50,6 +53,9 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "A", "SIM", "C4", "PLC", "UP", "TID"]
+
+[tool.ruff.lint.flake8-builtins]
+builtins-ignorelist = ["input", "id"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["rxon"]
@@ -70,5 +76,15 @@ module = [
 disallow_untyped_decorators = false
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["mutants", ".mutmut-cache", ".venv", "build", "dist"]
+pythonpath = "src"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.mutmut]
+source_paths = ["src/rxon"]
+pytest_add_cli_args_test_selection = ["tests/"]
+pytest_add_cli_args = ["-q", "--no-header", "--tb=no", "--ignore=mutants"]
+mutate_only_covered_lines = true
+use_git_change_detection = true

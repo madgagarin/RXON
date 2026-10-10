@@ -2,26 +2,28 @@
 
 [EN](https://github.com/madgagarin/rxon/blob/main/CONTRIBUTING.md) | **ES** | [RU](https://github.com/madgagarin/rxon/blob/main/docs/ru/CONTRIBUTING.md)
 
-Al ser la capa de protocolo compartida, los cambios aquí afectan a todo el ecosistema. Por favor, sea extra cuidadoso.
+Como capa de protocolo compartida, los cambios en este repositorio afectan a las bibliotecas dependientes.
 
 ## Configuración
 
-1.  Clone el repositorio y navegue a este directorio.
-2.  Instale en modo editable:
-    ```bash
-    pip install -e .[dev]
-    ```
+1. Clone el repositorio y navegue al directorio del proyecto.
+2. Instale en modo editable con dependencias de desarrollo:
+   ```bash
+   pip install -e .[dev]
+   ```
 
-## Pruebas
+## Pruebas y Análisis Estático
 
-Ejecute las pruebas para asegurar la integridad del protocolo:
+Ejecute la suite de pruebas, el linter y el comprobador de tipos:
 
 ```bash
 pytest tests/
+ruff check .
+mypy src tests
 ```
 
-## Guías
+## Directrices
 
-- **Cambios Críticos**: Cualquier cambio en `rxon.models` es potencialmente un cambio crítico. Consulte con los mantenedores antes de enviarlo.
-- **Dependencias**: Mantenga el núcleo libre de dependencias. El código de red debe ir en `rxon.transports`.
-- **Tipado**: El tipado estático es estrictamente requerido para todos los modelos del protocolo.
+- **Compatibilidad**: los cambios en `rxon.models` pueden romper la compatibilidad a nivel de protocolo de red. Consulte los cambios propuestos antes de enviarlos.
+- **Dependencias**: mantenga el núcleo ligero y sin dependencias externas innecesarias.
+- **Tipado**: el tipado estático estricto es obligatorio en todos los modelos e interfaces públicas.

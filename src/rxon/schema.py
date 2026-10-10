@@ -5,16 +5,18 @@
 
 from __future__ import annotations
 
-import dataclasses
-import inspect
 from collections.abc import Callable
+from contextlib import suppress
+from dataclasses import MISSING, is_dataclass
+from dataclasses import fields as dataclass_fields
 from enum import Enum
+from inspect import Parameter, signature
 from logging import getLogger
 from re import match as re_match
 from re import sub as re_sub
 from threading import Lock
 from types import UnionType
-from typing import Annotated, Any, Union, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, Union, cast, get_args, get_origin, get_type_hints
 from uuid import UUID
 
 from fastjsonschema import JsonSchemaValueException
@@ -41,6 +43,11 @@ class Header:
         return f"Header({self.name!r})"
 
 
+_type_schema_cache: dict[type, dict[str, Any]] = {}
+_type_schema_lock = Lock()
+_MAX_TYPE_SCHEMA_CACHE_SIZE: int = 2048
+
+
 def extract_json_schema(
     schema_type: Any, extractor: Callable[[Any], dict[str, Any] | None] | None = None
 ) -> dict[str, Any] | None:
@@ -49,26 +56,44 @@ def extract_json_schema(
     if isinstance(schema_type, dict):
         return schema_type
 
+    use_cache = extractor is None and isinstance(schema_type, type)
+    if use_cache:
+        cached = _type_schema_cache.get(schema_type)
+        if cached is not None:
+            return cached
+
+    schema = _extract_json_schema_uncached(schema_type, extractor=extractor)
+
+    if use_cache and schema is not None:
+        with _type_schema_lock:
+            if schema_type not in _type_schema_cache:
+                if len(_type_schema_cache) >= _MAX_TYPE_SCHEMA_CACHE_SIZE:
+                    _type_schema_cache.pop(next(iter(_type_schema_cache)))
+                _type_schema_cache[schema_type] = schema
+
+    return schema
+
+
+def _extract_json_schema_uncached(
+    schema_type: Any, extractor: Callable[[Any], dict[str, Any] | None] | None = None
+) -> dict[str, Any] | None:
     if extractor:
         custom_schema = extractor(schema_type)
         if custom_schema is not None:
             return custom_schema
 
-    # Duck typing for Pydantic v2
     if hasattr(schema_type, "model_json_schema") and callable(schema_type.model_json_schema):
         try:
-            return schema_type.model_json_schema()
+            return cast(dict[str, Any], schema_type.model_json_schema())
         except Exception:
             pass
 
-    # Duck typing for Pydantic v1
     if hasattr(schema_type, "schema") and callable(schema_type.schema):
         try:
-            return schema_type.schema()
+            return cast(dict[str, Any], schema_type.schema())
         except Exception:
             pass
 
-    # msgspec Struct
     if isinstance(schema_type, type) and issubclass(schema_type, Struct):
         properties = {}
         required = []
@@ -85,19 +110,19 @@ def extract_json_schema(
             "additionalProperties": False,
         }
 
-    # dataclasses
-    if isinstance(schema_type, type) and dataclasses.is_dataclass(schema_type):
+    if isinstance(schema_type, type) and is_dataclass(schema_type):
         properties = {}
         required = []
-        for f in dataclasses.fields(schema_type):
+        try:
+            hints = get_type_hints(schema_type)
+        except Exception:
+            hints = {}
+        for f in dataclass_fields(schema_type):
             if f.name.startswith("_"):
                 continue
-            properties[f.name] = _python_type_to_json_schema(f.type)
-            if (
-                f.default is dataclasses.MISSING
-                and f.default_factory is dataclasses.MISSING
-                and not _is_optional(f.type)
-            ):
+            field_type = hints.get(f.name, f.type)
+            properties[f.name] = _python_type_to_json_schema(field_type)
+            if f.default is MISSING and f.default_factory is MISSING and not _is_optional(field_type):
                 required.append(f.name)
         return {
             "type": "object",
@@ -131,6 +156,10 @@ def _python_type_to_json_schema(tp: Any) -> dict[str, Any]:
         None: "null",
         type(None): "null",
         UUID: "string",
+        "str": "string",
+        "int": "integer",
+        "float": "number",
+        "bool": "boolean",
     }
 
     if tp in mapping:
@@ -160,17 +189,17 @@ def _python_type_to_json_schema(tp: Any) -> dict[str, Any]:
 
     if hasattr(tp, "model_json_schema") and callable(tp.model_json_schema):
         try:
-            return tp.model_json_schema()
+            return cast(dict[str, Any], tp.model_json_schema())
         except Exception:
             pass
 
     if hasattr(tp, "schema") and callable(tp.schema):
         try:
-            return tp.schema()
+            return cast(dict[str, Any], tp.schema())
         except Exception:
             pass
 
-    if isinstance(tp, type) and dataclasses.is_dataclass(tp):
+    if isinstance(tp, type) and is_dataclass(tp):
         nested = extract_json_schema(tp)
         return nested if nested else {"type": "object"}
 
@@ -339,8 +368,11 @@ def extract_input_schema_from_func(
     if not callable(func):
         return None
 
+    if extractor is None and hasattr(func, "_rxon_input_schema"):
+        return cast(dict[str, Any] | None, func._rxon_input_schema)
+
     try:
-        sig = inspect.signature(func)
+        sig = signature(func)
     except Exception:
         return None
 
@@ -365,13 +397,13 @@ def extract_input_schema_from_func(
         "data_stores",
         "client",
     }
-    business_params: list[tuple[str, inspect.Parameter, Any]] = []
+    business_params: list[tuple[str, Parameter, Any]] = []
 
     for name, param in sig.parameters.items():
         if name in system_param_names:
             continue
 
-        if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+        if param.kind in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD):
             continue
 
         ann = hints.get(name, param.annotation)
@@ -379,8 +411,7 @@ def extract_input_schema_from_func(
         if get_origin(ann) is Annotated:
             meta_args = get_args(ann)[1:]
             if any(
-                getattr(m, "__class__", type(m)).__name__ == "Header"
-                or getattr(m, "is_header", False)
+                getattr(m, "__class__", type(m)).__name__ == "Header" or getattr(m, "is_header", False)
                 for m in meta_args
             ):
                 continue
@@ -388,6 +419,9 @@ def extract_input_schema_from_func(
         business_params.append((name, param, ann))
 
     if not business_params:
+        if extractor is None and hasattr(func, "__dict__"):
+            with suppress(Exception):
+                func._rxon_input_schema = None
         return None
 
     def _is_structured_model(tp: Any) -> bool:
@@ -395,54 +429,57 @@ def extract_input_schema_from_func(
             tp = get_args(tp)[0]
         if not isinstance(tp, type):
             return False
-        return (
-            issubclass(tp, Struct)
-            or hasattr(tp, "model_json_schema")
-            or hasattr(tp, "schema")
-            or dataclasses.is_dataclass(tp)
-        )
+        return issubclass(tp, Struct) or hasattr(tp, "model_json_schema") or hasattr(tp, "schema") or is_dataclass(tp)
 
-    # 1 parameter
     if len(business_params) == 1:
         name, param, ann = business_params[0]
-        if name in ("initial_data", "input") and (
-            ann is inspect.Parameter.empty or ann is Any or ann is dict or get_origin(ann) is dict
-        ):
+        if name == "input" and (ann is Parameter.empty or ann is Any or ann is dict or get_origin(ann) is dict):
+            if extractor is None and hasattr(func, "__dict__"):
+                with suppress(Exception):
+                    func._rxon_input_schema = None
             return None
 
         actual_type = get_args(ann)[0] if get_origin(ann) is Annotated else ann
 
         if _is_structured_model(actual_type):
-            return extract_json_schema(actual_type, extractor=extractor)
+            schema = extract_json_schema(actual_type, extractor=extractor)
+        else:
+            prop_schema = extract_json_schema(actual_type, extractor=extractor) or {"type": "string"}
+            required = [name] if param.default == Parameter.empty else []
+            schema = {
+                "type": "object",
+                "properties": {name: prop_schema},
+                "required": required,
+                "additionalProperties": False,
+            }
 
-        prop_schema = extract_json_schema(ann, extractor=extractor) or {"type": "string"}
-        required = [name] if param.default == inspect.Parameter.empty else []
-        return {
-            "type": "object",
-            "properties": {name: prop_schema},
-            "required": required,
-            "additionalProperties": False,
-        }
+        if extractor is None and hasattr(func, "__dict__"):
+            with suppress(Exception):
+                func._rxon_input_schema = schema
+        return schema
 
-    # >= 2 parameters: composite schema
     properties = {}
     required = []
     for name, param, ann in business_params:
         actual_type = get_args(ann)[0] if get_origin(ann) is Annotated else ann
-        if actual_type is inspect.Parameter.empty or actual_type is Any:
+        if actual_type is Parameter.empty or actual_type is Any:
             prop_schema = {}
         else:
             prop_schema = extract_json_schema(actual_type, extractor=extractor) or {}
         properties[name] = prop_schema
-        if param.default == inspect.Parameter.empty:
+        if param.default == Parameter.empty:
             required.append(name)
 
-    return {
+    schema = {
         "type": "object",
         "properties": properties,
         "required": required,
         "additionalProperties": False,
     }
+    if extractor is None and hasattr(func, "__dict__"):
+        with suppress(Exception):
+            func._rxon_input_schema = schema
+    return schema
 
 
 def extract_schema_from_func(
@@ -461,17 +498,29 @@ def extract_schema_from_func(
 def extract_output_schema_from_func(
     func: Any, extractor: Callable[[Any], dict[str, Any] | None] | None = None
 ) -> dict[str, Any] | None:
+    if not callable(func):
+        return None
+
+    if extractor is None and hasattr(func, "_rxon_output_schema"):
+        return cast(dict[str, Any] | None, func._rxon_output_schema)
+
+    res = None
     try:
         hints = get_type_hints(func)
         return_hint = hints.get("return")
-        if return_hint is None or return_hint is type(None):
-            return None
-        if get_origin(return_hint) is dict or return_hint is dict:
-            return None
-        return extract_json_schema(return_hint, extractor=extractor)
+        if (
+            return_hint is not None
+            and return_hint is not type(None)
+            and not (get_origin(return_hint) is dict or return_hint is dict)
+        ):
+            res = extract_json_schema(return_hint, extractor=extractor)
     except Exception:
         pass
-    return None
+
+    if extractor is None and hasattr(func, "__dict__"):
+        with suppress(Exception):
+            func._rxon_output_schema = res
+    return res
 
 
 def extract_skill_contract(
@@ -488,8 +537,6 @@ def extract_skill_contract(
                     break
         if start_handler:
             input_schema = extract_input_schema_from_func(start_handler, extractor=extractor)
-            if input_schema is None:
-                input_schema = extract_schema_from_func(start_handler, "initial_data", extractor=extractor)
 
     end_schemas = []
     if hasattr(blueprint, "end_states"):
@@ -506,10 +553,10 @@ def extract_skill_contract(
     elif len(end_schemas) > 1:
         output_schema = {"anyOf": end_schemas}
 
-    output_statuses = set()
+    output_statuses: set[str] = set()
     if hasattr(blueprint, "_get_all_transitions"):
         if hasattr(blueprint, "end_states"):
-            output_statuses.update(blueprint.end_states)
+            output_statuses.update(str(s) for s in blueprint.end_states)
         if not output_statuses:
             output_statuses.update(["success", "failure"])
 
@@ -517,5 +564,5 @@ def extract_skill_contract(
         "input_schema": input_schema,
         "output_schema": output_schema,
         "events_schema": getattr(blueprint, "events_schema", None),
-        "output_statuses": sorted(output_statuses) if output_statuses else ["success", "failure"],
+        "output_statuses": sorted(str(s) for s in output_statuses) if output_statuses else ["success", "failure"],
     }

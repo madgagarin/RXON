@@ -25,5 +25,7 @@ def test_invalid_identifiers() -> None:
 
 def test_validate_identifier_raises() -> None:
     validate_identifier("valid-id")
+    with raises(ValueError, match=r"^Invalid identifier: 'invalid id!'.*"):
+        validate_identifier("invalid id!")
     with raises(ValueError, match="Invalid test_id"):
         validate_identifier("invalid id!", name="test_id")

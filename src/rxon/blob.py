@@ -27,8 +27,8 @@ class BlobProvider(ABC):
     """
 
     @abstractmethod
-    async def upload(self, local_path: str, uri: str) -> "FileMetadata":
-        """Uploads a local file to the storage and returns FileMetadata."""
+    async def upload(self, local_path: str, uri: str) -> str | FileMetadata:
+        """Uploads a local file to the storage and returns etag or FileMetadata."""
         pass
 
     @abstractmethod

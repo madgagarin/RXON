@@ -72,8 +72,33 @@ class MockBlobProvider(BlobProvider):
         return True
 
 
+class MockStringBlobProvider(BlobProvider):
+    async def upload(self, local_path: str, uri: str) -> str:
+        return "etag-str-123"
+
+    async def download(self, uri: str, local_path: str) -> bool:
+        return True
+
+    async def get_metadata(self, uri: str) -> dict[str, Any] | None:
+        return {}
+
+    async def delete(self, uri: str) -> bool:
+        return True
+
+    async def delete_dir(self, uri: str) -> bool:
+        return True
+
+
 @mark.asyncio
 async def test_blob_provider_interface() -> None:
     provider = MockBlobProvider()
+    meta = await provider.upload("local.txt", "s3://b/f")
+    assert isinstance(meta, FileMetadata)
+    assert meta.etag == "fake-etag"
     assert await provider.delete("s3://b/f") is True
     assert await provider.delete_dir("s3://b/d/") is True
+
+    str_provider = MockStringBlobProvider()
+    etag = await str_provider.upload("local.txt", "s3://b/f")
+    assert isinstance(etag, str)
+    assert etag == "etag-str-123"
